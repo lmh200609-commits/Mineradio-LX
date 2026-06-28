@@ -64,16 +64,16 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "XxHuberrr",
-        "repo": "Mineradio"
+        "owner": "lmh200609-commits",
+        "repo": "Mineradio-LX"
       }
     ]
   },
   "mineradio": {
     "update": {
       "provider": "github",
-      "owner": "XxHuberrr",
-      "repo": "Mineradio",
+      "owner": "lmh200609-commits",
+      "repo": "Mineradio-LX",
       "preview": true,
       "preferMirrors": true,
       "mirrors": [
