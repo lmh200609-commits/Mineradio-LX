@@ -8,7 +8,7 @@ Mineradio-LX 是基于 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Minera
 https://github.com/lmh200609-commits/Mineradio-LX
 ```
 
-请从本仓库获取二开版本，不要从原版 Mineradio 的蓝奏云或上游 Release 下载，否则安装到的是原作者发布版，不包含 Mineradio-LX 的落雪音源适配。
+请从本仓库获取二开版本，不要从原版 Mineradio 仓库下载，否则安装到的是原作者发布版，不包含 Mineradio-LX 的落雪音源适配。
 
 ## 下载 Mineradio-LX
 
