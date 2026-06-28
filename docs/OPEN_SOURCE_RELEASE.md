@@ -30,6 +30,8 @@ The repository `.gitignore` already excludes these common local artifacts.
 
 - The app provides a local import/runtime adapter.
 - The repository does not bundle third-party source scripts.
+- The UI may prefill a public upstream source URL so users can review and import it themselves.
+- Current prefilled URL: `https://raw.githubusercontent.com/pdone/lx-music-source/main/lx/latest.js`.
 - Users are responsible for the legality, license, and platform-rule compliance of scripts they import.
 - Documentation should describe the feature as "user-provided custom source support", not as paid-access bypassing.
 
