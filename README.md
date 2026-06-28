@@ -1,6 +1,6 @@
-# Mineradio-LX
+# Mineradio-LX 让音乐全部免费 
 
-Mineradio-LX 是基于 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) 的 GPL-3.0 二次开发版本。它保留 Mineradio 的沉浸式播放器、歌词舞台、粒子视觉和 3D 歌单架，并新增落雪兼容自定义音源能力。
+Mineradio-LX 是基于 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) 的 GPL-3.0 二次开发版本。它保留 Mineradio 的沉浸式播放器、歌词舞台、粒子视觉和 3D 歌单架，并新增落雪兼容自定义音源能力。用户可以登入qq音乐或网易云音乐获取到自己的歌单，但是将音源已替换成免费的洛雪音源，实现歌曲免费畅听！
 
 本仓库地址：
 
