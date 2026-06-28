@@ -50,6 +50,8 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const tls = require('tls');
+const vm = require('vm');
+const zlib = require('zlib');
 const { once } = require('events');
 const { fileURLToPath } = require('url');
 const { analyzePodcastDjStream, analyzePodcastDjIntro } = require('./dj-analyzer');
@@ -63,6 +65,12 @@ const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(__dirname,
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
 const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\MineradioCache\\beatmaps';
+const USER_DATA_DIR = process.env.MINERADIO_USER_DATA_DIR || path.dirname(COOKIE_FILE || path.join(__dirname, '.cookie'));
+const LX_SOURCE_DIR = process.env.MINERADIO_LX_SOURCE_DIR || path.join(USER_DATA_DIR, 'lx-sources');
+const LX_SOURCE_CONFIG_FILE = process.env.MINERADIO_LX_SOURCE_CONFIG_FILE || path.join(LX_SOURCE_DIR, 'config.json');
+const LX_SOURCE_MAX_BYTES = 2 * 1024 * 1024;
+const LX_SOURCE_INIT_TIMEOUT_MS = 8000;
+const LX_SOURCE_ACTION_TIMEOUT_MS = 15000;
 const APP_PACKAGE = readPackageInfo();
 const APP_VERSION = process.env.MINERADIO_VERSION || APP_PACKAGE.version || '0.9.11';
 const UPDATE_CONFIG = readUpdateConfig(APP_PACKAGE);
@@ -1779,6 +1787,461 @@ async function requestJson(targetUrl, opts, body) {
   }
 }
 
+function ensureDir(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message || 'Operation timeout')), ms);
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
+}
+
+function parseLxScriptInfo(scriptText) {
+  const head = String(scriptText || '').slice(0, 4096);
+  const out = {};
+  head.replace(/^\s*\*\s*@([a-zA-Z0-9_-]+)\s+(.+?)\s*$/gm, (_m, key, value) => {
+    out[key] = String(value || '').trim();
+    return '';
+  });
+  return {
+    name: out.name || '',
+    description: out.description || '',
+    version: out.version || '',
+    author: out.author || '',
+    homepage: out.homepage || '',
+  };
+}
+
+function readLxSourceConfig() {
+  try {
+    if (!fs.existsSync(LX_SOURCE_CONFIG_FILE)) return { enabled: false };
+    const raw = fs.readFileSync(LX_SOURCE_CONFIG_FILE, 'utf8');
+    return JSON.parse(raw) || { enabled: false };
+  } catch (e) {
+    return { enabled: false, error: e.message || String(e) };
+  }
+}
+
+function writeLxSourceConfig(config) {
+  ensureDir(LX_SOURCE_DIR);
+  fs.writeFileSync(LX_SOURCE_CONFIG_FILE, JSON.stringify(config || {}, null, 2), 'utf8');
+}
+
+function sanitizeLxFileName(name) {
+  const raw = String(name || 'custom-source.js').replace(/[\\/:*?"<>|]+/g, '-').trim();
+  const base = raw && /\.js$/i.test(raw) ? raw : (raw || 'custom-source') + '.js';
+  return base.slice(0, 120);
+}
+
+function publicLxError(err) {
+  if (!err) return '';
+  return err.message || String(err);
+}
+
+function parseMaybeJson(text, contentType) {
+  const raw = Buffer.isBuffer(text) ? text.toString('utf8') : String(text || '');
+  if (/json/i.test(String(contentType || '')) || /^[\s\r\n]*[\[{]/.test(raw)) {
+    try { return JSON.parse(raw); } catch (e) {}
+  }
+  return raw;
+}
+
+function lxHttpRequest(targetUrl, options, callback) {
+  options = options || {};
+  let finished = false;
+  let body = options.body;
+  const headers = { ...(options.headers || {}) };
+  if (options.form && typeof options.form === 'object') {
+    body = new URLSearchParams(Object.keys(options.form).map(key => [key, String(options.form[key] == null ? '' : options.form[key])])).toString();
+    if (!headers['Content-Type'] && !headers['content-type']) headers['Content-Type'] = 'application/x-www-form-urlencoded';
+  }
+  if (body && typeof body === 'object' && !Buffer.isBuffer(body)) body = JSON.stringify(body);
+  if (body && !headers['Content-Length'] && !headers['content-length']) headers['Content-Length'] = Buffer.byteLength(body);
+
+  try {
+    const u = new URL(targetUrl);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Unsupported LX request protocol');
+    const lib = u.protocol === 'https:' ? https : http;
+    const req = lib.request(u, {
+      method: options.method || (body ? 'POST' : 'GET'),
+      headers,
+    }, response => {
+      const chunks = [];
+      let total = 0;
+      response.on('data', chunk => {
+        total += chunk.length;
+        if (total > LX_SOURCE_MAX_BYTES) {
+          req.destroy(new Error('LX request response too large'));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on('end', () => {
+        if (finished) return;
+        finished = true;
+        const buffer = Buffer.concat(chunks);
+        const text = buffer.toString('utf8');
+        const resp = {
+          statusCode: response.statusCode || 0,
+          status: response.statusCode || 0,
+          headers: response.headers || {},
+          body: parseMaybeJson(text, response.headers && response.headers['content-type']),
+          rawBody: buffer,
+        };
+        callback(null, resp, resp.body);
+      });
+    });
+    req.setTimeout(Math.max(1000, Number(options.timeout) || 10000), () => req.destroy(new Error('LX request timeout')));
+    req.on('error', err => {
+      if (finished) return;
+      finished = true;
+      callback(err);
+    });
+    if (body) req.write(body);
+    req.end();
+    return () => req.destroy();
+  } catch (err) {
+    setTimeout(() => callback(err), 0);
+    return () => {};
+  }
+}
+
+function createLxUtils() {
+  return {
+    buffer: {
+      from: (...args) => Buffer.from(...args),
+      bufToString: (buffer, format) => Buffer.from(buffer || '').toString(format || 'utf8'),
+    },
+    crypto: {
+      md5: value => crypto.createHash('md5').update(String(value || '')).digest('hex'),
+      randomBytes: size => crypto.randomBytes(Math.max(0, Number(size) || 0)),
+      aesEncrypt: (buffer, mode, key, iv) => {
+        const keyBuffer = Buffer.from(key || '');
+        const ivBuffer = Buffer.from(iv || '');
+        const algo = 'aes-' + (keyBuffer.length * 8) + '-' + String(mode || 'cbc').toLowerCase();
+        const cipher = crypto.createCipheriv(algo, keyBuffer, ivBuffer);
+        return Buffer.concat([cipher.update(Buffer.from(buffer || '')), cipher.final()]);
+      },
+      rsaEncrypt: (buffer, key) => crypto.publicEncrypt(String(key || ''), Buffer.from(buffer || '')),
+    },
+    zlib: {
+      inflate: buffer => new Promise((resolve, reject) => zlib.inflate(Buffer.from(buffer || ''), (err, out) => err ? reject(err) : resolve(out))),
+      deflate: buffer => new Promise((resolve, reject) => zlib.deflate(Buffer.from(buffer || ''), (err, out) => err ? reject(err) : resolve(out))),
+    },
+  };
+}
+
+const lxRuntime = {
+  loaded: false,
+  loading: null,
+  error: '',
+  config: null,
+  metadata: null,
+  sources: {},
+  handler: null,
+  updateAlert: null,
+};
+
+function resetLxRuntime() {
+  lxRuntime.loaded = false;
+  lxRuntime.loading = null;
+  lxRuntime.error = '';
+  lxRuntime.metadata = null;
+  lxRuntime.sources = {};
+  lxRuntime.handler = null;
+  lxRuntime.updateAlert = null;
+}
+
+async function loadLxSourceRunner(force) {
+  if (lxRuntime.loading && !force) return lxRuntime.loading;
+  if (lxRuntime.loaded && !force) return lxRuntime;
+  resetLxRuntime();
+  const config = readLxSourceConfig();
+  lxRuntime.config = config;
+  if (!config.enabled) {
+    lxRuntime.error = config.error || '';
+    return lxRuntime;
+  }
+
+  lxRuntime.loading = (async () => {
+    try {
+      const filePath = String(config.filePath || '').trim();
+      if (!filePath || !fs.existsSync(filePath)) throw new Error('LX_SOURCE_FILE_MISSING');
+      const stat = fs.statSync(filePath);
+      if (stat.size > LX_SOURCE_MAX_BYTES) throw new Error('LX_SOURCE_FILE_TOO_LARGE');
+      const scriptText = fs.readFileSync(filePath, 'utf8');
+      const metadata = { ...parseLxScriptInfo(scriptText), rawScript: scriptText };
+      const handlers = new Map();
+      let initedPayload = null;
+      let resolveInited;
+      const initedPromise = new Promise(resolve => { resolveInited = resolve; });
+      const EVENT_NAMES = { inited: 'inited', request: 'request', updateAlert: 'updateAlert' };
+      const lx = {
+        version: '1.2.0',
+        env: 'desktop',
+        currentScriptInfo: metadata,
+        EVENT_NAMES,
+        request: lxHttpRequest,
+        on: (eventName, handler) => {
+          if (typeof handler === 'function') handlers.set(eventName, handler);
+        },
+        send: (eventName, payload) => {
+          if (eventName === EVENT_NAMES.inited) {
+            initedPayload = payload || {};
+            resolveInited(initedPayload);
+          } else if (eventName === EVENT_NAMES.updateAlert) {
+            lxRuntime.updateAlert = payload || null;
+          }
+        },
+        utils: createLxUtils(),
+      };
+      const sandbox = {
+        globalThis: null,
+        lx,
+        console,
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        Promise,
+        URL,
+        URLSearchParams,
+        TextEncoder,
+        TextDecoder,
+        atob: value => Buffer.from(String(value || ''), 'base64').toString('binary'),
+        btoa: value => Buffer.from(String(value || ''), 'binary').toString('base64'),
+      };
+      sandbox.globalThis = sandbox;
+      const context = vm.createContext(sandbox, { name: 'mineradio-lx-source' });
+      vm.runInContext(scriptText, context, {
+        filename: path.basename(filePath),
+        timeout: 2000,
+        displayErrors: true,
+      });
+      await withTimeout(initedPromise, LX_SOURCE_INIT_TIMEOUT_MS, 'LX_SOURCE_INIT_TIMEOUT');
+      if (!initedPayload || !initedPayload.sources) throw new Error('LX_SOURCE_NOT_INITED');
+      const handler = handlers.get(EVENT_NAMES.request);
+      if (typeof handler !== 'function') throw new Error('LX_SOURCE_REQUEST_HANDLER_MISSING');
+      lxRuntime.loaded = true;
+      lxRuntime.error = '';
+      lxRuntime.metadata = { ...metadata, rawScript: undefined };
+      lxRuntime.sources = initedPayload.sources || {};
+      lxRuntime.handler = handler;
+      return lxRuntime;
+    } catch (err) {
+      lxRuntime.error = publicLxError(err);
+      lxRuntime.loaded = false;
+      throw err;
+    } finally {
+      lxRuntime.loading = null;
+    }
+  })();
+  return lxRuntime.loading;
+}
+
+async function getLxSourceStatus() {
+  const config = readLxSourceConfig();
+  lxRuntime.config = config;
+  if (config.enabled && !lxRuntime.loaded) {
+    try { await loadLxSourceRunner(false); } catch (e) {}
+  }
+  return {
+    enabled: !!config.enabled,
+    loaded: !!lxRuntime.loaded,
+    error: lxRuntime.error || config.error || '',
+    filePath: config.filePath || '',
+    importedAt: config.importedAt || 0,
+    metadata: lxRuntime.metadata || config.metadata || null,
+    sources: lxRuntime.sources || {},
+    updateAlert: lxRuntime.updateAlert || null,
+  };
+}
+
+function lxImportText(value) {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    if (typeof value.value === 'string') return value.value;
+    if (typeof value.text === 'string') return value.text;
+    if (typeof value.content === 'string') return value.content;
+  }
+  return value == null ? '' : String(value);
+}
+
+async function importLxSource(input) {
+  input = input || {};
+  ensureDir(LX_SOURCE_DIR);
+  let scriptText = lxImportText(input.script || input.rawScript || '');
+  let sourceName = input.name || '';
+  const inlineUrl = scriptText.trim();
+  if (!input.url && /^https?:\/\/\S+$/i.test(inlineUrl)) {
+    input = { ...input, url: inlineUrl };
+    scriptText = '';
+  }
+  if (!scriptText && input.url) {
+    const raw = await requestText(String(input.url), { headers: { 'User-Agent': UA } });
+    scriptText = String(raw || '');
+    sourceName = sourceName || path.basename(new URL(String(input.url)).pathname);
+  }
+  if (!scriptText && input.filePath) {
+    const filePath = String(input.filePath || '');
+    const stat = fs.statSync(filePath);
+    if (stat.size > LX_SOURCE_MAX_BYTES) throw new Error('LX_SOURCE_FILE_TOO_LARGE');
+    scriptText = fs.readFileSync(filePath, 'utf8');
+    sourceName = sourceName || path.basename(filePath);
+  }
+  if (!scriptText.trim()) throw new Error('LX_SOURCE_EMPTY');
+  if (Buffer.byteLength(scriptText, 'utf8') > LX_SOURCE_MAX_BYTES) throw new Error('LX_SOURCE_TOO_LARGE');
+  const metadata = parseLxScriptInfo(scriptText);
+  const fileName = sanitizeLxFileName(sourceName || metadata.name || 'custom-source.js');
+  const filePath = path.join(LX_SOURCE_DIR, fileName);
+  fs.writeFileSync(filePath, scriptText, 'utf8');
+  const config = {
+    enabled: input.enabled !== false,
+    filePath,
+    importedAt: Date.now(),
+    metadata,
+  };
+  writeLxSourceConfig(config);
+  resetLxRuntime();
+  if (config.enabled) {
+    try { await loadLxSourceRunner(true); } catch (e) {}
+  }
+  return getLxSourceStatus();
+}
+
+function firstLxSourceForAction(action) {
+  const sources = lxRuntime.sources || {};
+  return Object.keys(sources).find(key => {
+    const source = sources[key] || {};
+    return Array.isArray(source.actions) && source.actions.includes(action);
+  }) || '';
+}
+
+function normalizeLxQuality(sourceKey, requested) {
+  const source = (lxRuntime.sources || {})[sourceKey] || {};
+  const qualitys = Array.isArray(source.qualitys) ? source.qualitys : [];
+  const raw = String(requested || '').toLowerCase();
+  const aliases = {
+    jymaster: 'flac24bit',
+    hires: 'flac24bit',
+    lossless: 'flac',
+    exhigh: '320k',
+    standard: '128k',
+    high: '320k',
+    normal: '128k',
+  };
+  const wanted = aliases[raw] || raw;
+  return qualitys.includes(wanted) ? wanted : (qualitys.includes('flac') ? 'flac' : (qualitys[0] || null));
+}
+
+function buildLxMusicInfo(input) {
+  input = input || {};
+  const id = input.id || input.songmid || input.mid || input.songId || '';
+  return {
+    ...input,
+    id,
+    songmid: input.songmid || input.mid || id,
+    mid: input.mid || input.songmid || id,
+    name: input.name || input.title || '',
+    singer: input.singer || input.artist || '',
+    artist: input.artist || input.singer || '',
+    album: input.album || '',
+    interval: input.interval || input.duration || 0,
+    duration: input.duration || input.interval || 0,
+    source: input.source || input.provider || '',
+  };
+}
+
+async function invokeLxSourceAction(action, params) {
+  params = params || {};
+  await loadLxSourceRunner(false);
+  if (!lxRuntime.loaded || typeof lxRuntime.handler !== 'function') throw new Error(lxRuntime.error || 'LX_SOURCE_NOT_READY');
+  const requestedSources = [params.lxSource, params.sourceKey, params.lx_source, params.source]
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+  const sourceKey = requestedSources.find(key => {
+    const source = lxRuntime.sources[key] || {};
+    return Array.isArray(source.actions) && source.actions.includes(action);
+  }) || firstLxSourceForAction(action);
+  if (!sourceKey) throw new Error('LX_SOURCE_ACTION_UNSUPPORTED');
+  const source = lxRuntime.sources[sourceKey] || {};
+  const actions = Array.isArray(source.actions) ? source.actions : [];
+  if (!actions.includes(action)) throw new Error('LX_SOURCE_ACTION_UNSUPPORTED');
+  const musicInfo = buildLxMusicInfo(params.musicInfo || params);
+  const info = action === 'musicUrl'
+    ? { type: normalizeLxQuality(sourceKey, params.quality || params.type), musicInfo }
+    : { musicInfo };
+  const result = await withTimeout(Promise.resolve(lxRuntime.handler({ source: sourceKey, action, info })), LX_SOURCE_ACTION_TIMEOUT_MS, 'LX_SOURCE_ACTION_TIMEOUT');
+  return { sourceKey, source, result };
+}
+
+async function handleLxSongUrl(params) {
+  const requested = String(params && (params.quality || params.type) || '').trim();
+  const qualityCandidates = [];
+  [requested, 'lossless', 'exhigh', 'standard'].forEach(quality => {
+    quality = String(quality || '').trim();
+    if (quality && !qualityCandidates.includes(quality)) qualityCandidates.push(quality);
+  });
+  let lastError = null;
+  for (const quality of qualityCandidates) {
+    try {
+      const out = await invokeLxSourceAction('musicUrl', { ...params, quality, type: quality });
+      const raw = out.result;
+      const url = typeof raw === 'string' ? raw : (raw && (raw.url || raw.location || raw.src)) || '';
+      if (!url) {
+        lastError = new Error('LX_URL_EMPTY');
+        continue;
+      }
+      return {
+        provider: 'lx',
+        sourceKey: out.sourceKey,
+        sourceName: out.source && out.source.name || out.sourceKey,
+        url,
+        playable: true,
+        requestedQuality: requested,
+        quality,
+        qualityFallback: requested && requested !== quality,
+        raw: typeof raw === 'object' ? raw : undefined,
+      };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('LX_URL_EMPTY');
+}
+
+async function handleLxLyric(params) {
+  const out = await invokeLxSourceAction('lyric', params);
+  const raw = out.result || {};
+  return {
+    provider: 'lx',
+    sourceKey: out.sourceKey,
+    sourceName: out.source && out.source.name || out.sourceKey,
+    lyric: raw.lyric || raw.lrc || '',
+    tlyric: raw.tlyric || raw.tlryic || '',
+    rlyric: raw.rlyric || '',
+    lxlyric: raw.lxlyric || '',
+    raw,
+  };
+}
+
+async function handleLxPic(params) {
+  const out = await invokeLxSourceAction('pic', params);
+  const raw = out.result;
+  const pic = typeof raw === 'string' ? raw : (raw && (raw.url || raw.pic || raw.cover)) || '';
+  return {
+    provider: 'lx',
+    sourceKey: out.sourceKey,
+    sourceName: out.source && out.source.name || out.sourceKey,
+    url: pic,
+    pic,
+    raw: typeof raw === 'object' ? raw : undefined,
+  };
+}
+
 function clampNumber(value, min, max, fallback) {
   if (value === null || value === undefined || value === '') return fallback;
   const n = Number(value);
@@ -3237,6 +3700,189 @@ async function getLoginInfo() {
   }
 }
 
+async function handleNeteaseSongUrlForProvider(id, quality) {
+  const loginInfo = await getLoginInfo();
+  const info = await handleSongUrl(id, loginInfo, quality);
+  return {
+    ...info,
+    provider: 'netease',
+    loggedIn: loginInfo.loggedIn,
+    vipType: loginInfo.vipType || 0,
+    vipLevel: loginInfo.vipLevel || 'none',
+    isVip: !!loginInfo.isVip,
+    isSvip: !!loginInfo.isSvip,
+    vipLabel: loginInfo.vipLabel || 'none',
+  };
+}
+
+async function handleNeteaseLyric(id) {
+  if (!id) throw new Error('Missing song id');
+  let body = {};
+  let source = 'lyric';
+  try {
+    if (typeof lyric_new === 'function') {
+      const nr = await lyric_new({ id, cookie: userCookie, timestamp: Date.now() });
+      body = nr.body || {};
+      source = 'lyric_new';
+    }
+  } catch (errNew) {
+    console.warn('[LyricNew]', errNew.message);
+  }
+  if (!((body.lrc && body.lrc.lyric) || (body.yrc && body.yrc.lyric))) {
+    const r = await lyric({ id, cookie: userCookie, timestamp: Date.now() });
+    body = r.body || body || {};
+    source = 'lyric';
+  }
+  return {
+    provider: 'netease',
+    lyric: (body.lrc && body.lrc.lyric) || '',
+    tlyric: (body.tlyric && body.tlyric.lyric) || '',
+    yrc: (body.yrc && body.yrc.lyric) || '',
+    source,
+  };
+}
+
+async function handleNeteasePlaylistTracks(id) {
+  if (!id) throw new Error('Missing playlist id');
+  let playlistMeta = { id, name: '', cover: '', trackCount: 0 };
+  let rawTracks = [];
+
+  if (typeof playlist_track_all === 'function') {
+    try {
+      const all = await playlist_track_all({ id, limit: 500, offset: 0, cookie: userCookie, timestamp: Date.now() });
+      rawTracks = (all.body && (all.body.songs || all.body.tracks)) || [];
+    } catch (err) {
+      console.warn('[PlaylistTracks] playlist_track_all failed, fallback to detail:', err.message);
+    }
+  }
+
+  if (!rawTracks.length && typeof playlist_detail === 'function') {
+    const detail = await playlist_detail({ id, s: 0, cookie: userCookie, timestamp: Date.now() });
+    const pl = (detail.body && detail.body.playlist) || {};
+    playlistMeta = { id: pl.id || id, name: pl.name || '', cover: pl.coverImgUrl || '', trackCount: pl.trackCount || 0 };
+    rawTracks = pl.tracks || [];
+  }
+
+  const tracks = rawTracks.map(mapSongRecord).filter(t => t.id);
+  if (!playlistMeta.trackCount) playlistMeta.trackCount = tracks.length;
+  return { provider: 'netease', playlist: playlistMeta, tracks };
+}
+
+const musicProviders = {
+  netease: {
+    key: 'netease',
+    label: 'NetEase Cloud Music',
+    type: 'built-in',
+    actions: ['search', 'songUrl', 'lyric', 'playlistTracks'],
+    search: params => handleSearch(params.keywords, params.limit),
+    getSongUrl: params => handleNeteaseSongUrlForProvider(params.id, params.quality),
+    getLyric: params => handleNeteaseLyric(params.id),
+    getPlaylistTracks: params => handleNeteasePlaylistTracks(params.id),
+  },
+  qq: {
+    key: 'qq',
+    label: 'QQ Music',
+    type: 'built-in',
+    actions: ['search', 'songUrl', 'lyric', 'playlistTracks'],
+    search: params => handleQQSearch(params.keywords, params.limit),
+    getSongUrl: params => handleQQSongUrl(params.mid || params.id, params.mediaMid || params.media_mid, params.quality),
+    getLyric: params => handleQQLyric(params.mid || params.songmid || '', params.id || params.qqId || ''),
+    getPlaylistTracks: params => handleQQPlaylistTracks(params.id || params.disstid || ''),
+  },
+  lx: {
+    key: 'lx',
+    label: 'LX Custom Source',
+    type: 'custom',
+    actions: ['songUrl', 'lyric', 'pic'],
+    getSongUrl: params => handleLxSongUrl(params),
+    getLyric: params => handleLxLyric(params),
+    getPic: params => handleLxPic(params),
+  },
+};
+
+function providerSummary(provider) {
+  return {
+    key: provider.key,
+    label: provider.label,
+    type: provider.type,
+    actions: provider.actions || [],
+  };
+}
+
+async function listProviderSummaries() {
+  const lxStatus = await getLxSourceStatus();
+  return Object.keys(musicProviders).map(key => {
+    const summary = providerSummary(musicProviders[key]);
+    if (key === 'lx') {
+      summary.enabled = lxStatus.enabled;
+      summary.loaded = lxStatus.loaded;
+      summary.error = lxStatus.error || '';
+      summary.sources = lxStatus.sources || {};
+      summary.metadata = lxStatus.metadata || null;
+    }
+    return summary;
+  });
+}
+
+function providerRequestParams(url, body) {
+  const params = {};
+  url.searchParams.forEach((value, key) => { params[key] = value; });
+  Object.assign(params, body || {});
+  params.keywords = params.keywords || params.keyword || params.q || '';
+  params.limit = Math.max(1, Math.min(80, parseInt(params.limit || '20', 10) || 20));
+  params.id = params.id || params.sid || params.songId || '';
+  return params;
+}
+
+function parseProviderApiPath(pn) {
+  const match = String(pn || '').match(/^\/api\/provider\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  return { key: decodeURIComponent(match[1]), actionPath: match[2] };
+}
+
+async function handleProviderApi(req, res, url, parsed) {
+  const provider = musicProviders[parsed.key];
+  if (!provider) {
+    sendJSON(res, { error: 'PROVIDER_NOT_FOUND', provider: parsed.key }, 404);
+    return true;
+  }
+  const body = req.method === 'POST' ? await readRequestBody(req) : {};
+  const params = providerRequestParams(url, body);
+  try {
+    if (parsed.actionPath === 'search') {
+      if (typeof provider.search !== 'function') throw new Error('PROVIDER_SEARCH_UNSUPPORTED');
+      const songs = await provider.search(params);
+      sendJSON(res, { provider: provider.key, songs: songs || [] });
+      return true;
+    }
+    if (parsed.actionPath === 'song/url') {
+      if (typeof provider.getSongUrl !== 'function') throw new Error('PROVIDER_SONG_URL_UNSUPPORTED');
+      sendJSON(res, await provider.getSongUrl(params));
+      return true;
+    }
+    if (parsed.actionPath === 'lyric') {
+      if (typeof provider.getLyric !== 'function') throw new Error('PROVIDER_LYRIC_UNSUPPORTED');
+      sendJSON(res, await provider.getLyric(params));
+      return true;
+    }
+    if (parsed.actionPath === 'pic') {
+      if (typeof provider.getPic !== 'function') throw new Error('PROVIDER_PIC_UNSUPPORTED');
+      sendJSON(res, await provider.getPic(params));
+      return true;
+    }
+    if (parsed.actionPath === 'playlist/tracks') {
+      if (typeof provider.getPlaylistTracks !== 'function') throw new Error('PROVIDER_PLAYLIST_TRACKS_UNSUPPORTED');
+      sendJSON(res, await provider.getPlaylistTracks(params));
+      return true;
+    }
+    sendJSON(res, { error: 'PROVIDER_ACTION_NOT_FOUND', provider: provider.key, action: parsed.actionPath }, 404);
+  } catch (err) {
+    console.error('[ProviderApi]', provider.key, parsed.actionPath, err);
+    sendJSON(res, { provider: provider.key, error: err.message || String(err), songs: [], tracks: [] }, /UNSUPPORTED|MISSING/i.test(err.message || '') ? 400 : 500);
+  }
+  return true;
+}
+
 // ====================================================================
 //  HTTP Server
 // ====================================================================
@@ -3258,6 +3904,77 @@ const server = http.createServer(async (req, res) => {
         manifestOverride: !!UPDATE_CONFIG.manifest,
       },
     });
+    return;
+  }
+
+  if (pn === '/api/providers') {
+    try {
+      sendJSON(res, { providers: await listProviderSummaries() });
+    } catch (err) {
+      console.error('[Providers]', err);
+      sendJSON(res, { error: err.message || String(err), providers: [] }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/lx/source/status') {
+    try {
+      sendJSON(res, await getLxSourceStatus());
+    } catch (err) {
+      console.error('[LXSourceStatus]', err);
+      sendJSON(res, { enabled: false, loaded: false, error: err.message || String(err), sources: {} }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/lx/source/import') {
+    if (req.method !== 'POST') {
+      sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const status = await importLxSource(body);
+      sendJSON(res, { ok: status.loaded, ...status }, status.error && !status.loaded ? 400 : 200);
+    } catch (err) {
+      console.error('[LXSourceImport]', err);
+      sendJSON(res, { ok: false, enabled: false, loaded: false, error: err.message || String(err), sources: {} }, 400);
+    }
+    return;
+  }
+
+  if (pn === '/api/lx/source/reload') {
+    if (req.method !== 'POST') {
+      sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+      return;
+    }
+    resetLxRuntime();
+    try {
+      const status = await getLxSourceStatus();
+      sendJSON(res, { ok: status.loaded, ...status }, status.error && !status.loaded ? 400 : 200);
+    } catch (err) {
+      console.error('[LXSourceReload]', err);
+      sendJSON(res, { ok: false, enabled: false, loaded: false, error: err.message || String(err), sources: {} }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/lx/source/disable') {
+    if (req.method !== 'POST') {
+      sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+      return;
+    }
+    const config = readLxSourceConfig();
+    config.enabled = false;
+    writeLxSourceConfig(config);
+    resetLxRuntime();
+    sendJSON(res, { ok: true, ...(await getLxSourceStatus()) });
+    return;
+  }
+
+  const providerApi = parseProviderApiPath(pn);
+  if (providerApi) {
+    await handleProviderApi(req, res, url, providerApi);
     return;
   }
 
