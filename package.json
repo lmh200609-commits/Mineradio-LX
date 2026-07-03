@@ -1,7 +1,7 @@
 {
   "name": "mineradio-lx",
   "productName": "Mineradio-LX",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Mineradio 二开版，融合沉浸式音乐播放与落雪兼容自定义音源。",
   "author": "Mineradio",
   "main": "desktop/main.js",
