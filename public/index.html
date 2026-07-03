@@ -18401,6 +18401,25 @@ function lxSongUrlForSource(song, quality, sourceKey) {
     '&lxSource=' + encodeURIComponent(sourceKey || '') +
     '&quality=' + encodeURIComponent(quality || playbackQuality);
 }
+function lxLyricUrlForSong(song, sourceKey) {
+  sourceKey = sourceKey || lxSourceKeyForSong(song);
+  var provider = originalSongProviderKey(song);
+  var numericId = /^\d+$/.test(String(song.id || '')) ? song.id : '';
+  return '/api/provider/lx/lyric?id=' + encodeURIComponent(song.id || song.qqId || song.songmid || song.mid || '') +
+    '&songmid=' + encodeURIComponent(song.songmid || song.mid || song.id || '') +
+    '&mid=' + encodeURIComponent(song.mid || song.songmid || song.id || '') +
+    '&mediaMid=' + encodeURIComponent(song.mediaMid || song.media_mid || '') +
+    '&albumMid=' + encodeURIComponent(song.albumMid || song.albummid || '') +
+    '&artistMid=' + encodeURIComponent(song.artistMid || song.singerMid || '') +
+    '&qqId=' + encodeURIComponent(song.qqId || numericId || '') +
+    '&name=' + encodeURIComponent(song.name || song.title || '') +
+    '&artist=' + encodeURIComponent(song.artist || '') +
+    '&album=' + encodeURIComponent(song.album || '') +
+    '&duration=' + encodeURIComponent(song.duration || 0) +
+    '&provider=' + encodeURIComponent(provider || '') +
+    '&source=' + encodeURIComponent(sourceKey || '') +
+    '&lxSource=' + encodeURIComponent(sourceKey || '');
+}
 async function requestLxPlaybackUrl(song, quality, opts) {
   opts = opts || {};
   if (!song || song.type === 'local' || song.localUrl || song.type === 'podcast' || song.source === 'podcast') return null;
@@ -19253,41 +19272,81 @@ function clearPlayerControlFocusState(reason) {
 // ============================================================
 //  歌词
 // ============================================================
-async function fetchLyric(songOrId, token) {
-  try {
-    var song = (songOrId && typeof songOrId === 'object') ? songOrId : null;
-    var provider = songProviderKey(song);
-    var endpoint;
-    if (provider === 'qq') {
-      var mid = song.mid || song.songmid || song.id || '';
-      var qqId = song.qqId || (/^\d+$/.test(String(song.id || '')) ? song.id : '');
-      endpoint = '/api/qq/lyric?mid=' + encodeURIComponent(mid) + '&id=' + encodeURIComponent(qqId);
-    } else if (provider === 'lx') {
-      endpoint = '/api/provider/lx/lyric?id=' + encodeURIComponent(song.id || song.songmid || song.mid || '') +
-        '&name=' + encodeURIComponent(song.name || '') +
-        '&artist=' + encodeURIComponent(song.artist || '') +
-        '&album=' + encodeURIComponent(song.album || '') +
-        '&duration=' + encodeURIComponent(song.duration || 0);
-    } else {
-      var songId = song ? song.id : songOrId;
-      endpoint = '/api/lyric?id=' + encodeURIComponent(songId);
-    }
-    var r = await apiJson(endpoint);
-    if (token !== trackSwitchToken) return;
-    var nativeLines = parseYrcText(r.yrc || '');
-    var lrcLines = parseLyricText(r.lyric || '');
-    var hasNativeKaraoke = nativeLines.some(function(line){ return line.words && line.words.length; });
-    var timingSource = hasNativeKaraoke ? 'yrc-word' : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? 'lrc-line' : 'fallback'));
-    var lines = withLyricFallback(nativeLines.length ? nativeLines : lrcLines);
-    if (lines.length && lines[0].fallback) timingSource = 'fallback';
-    setOriginalLyricsState(lines, hasNativeKaraoke, timingSource);
-    applyPreferredLyricsForCurrent(true);
-  } catch (e) {
-    if (token !== trackSwitchToken) return;
-    var fallbackLines = withLyricFallback([]);
-    setOriginalLyricsState(fallbackLines, false, 'fallback');
-    applyPreferredLyricsForCurrent(true);
+function qqLyricUrlForSong(song) {
+  song = song || {};
+  var idText = String(song.id || '');
+  var mid = song.mid || song.songmid || (/^\d+$/.test(idText) ? '' : idText);
+  var qqId = song.qqId || (/^\d+$/.test(idText) ? idText : '');
+  return '/api/qq/lyric?mid=' + encodeURIComponent(mid || '') + '&id=' + encodeURIComponent(qqId || '');
+}
+function neteaseLyricUrlForSong(songOrId) {
+  var id = songOrId && typeof songOrId === 'object' ? songOrId.id : songOrId;
+  return '/api/lyric?id=' + encodeURIComponent(id || '');
+}
+function lyricEndpointCandidates(songOrId) {
+  var song = (songOrId && typeof songOrId === 'object') ? songOrId : null;
+  var candidates = [];
+  var seen = {};
+  function add(label, url) {
+    if (!url || seen[url]) return;
+    seen[url] = true;
+    candidates.push({ label: label, url: url });
   }
+  if (!song) {
+    add('netease', neteaseLyricUrlForSong(songOrId));
+    return candidates;
+  }
+  var provider = songProviderKey(song);
+  var originalProvider = originalSongProviderKey(song);
+  if (provider === 'lx') {
+    add('lx', lxLyricUrlForSong(song));
+    if (originalProvider === 'qq' || song.mid || song.songmid || song.qqId) add('qq', qqLyricUrlForSong(song));
+    if (originalProvider === 'netease' || /^\d+$/.test(String(song.id || ''))) add('netease', neteaseLyricUrlForSong(song));
+    return candidates;
+  }
+  if (provider === 'qq') add('qq', qqLyricUrlForSong(song));
+  else add('netease', neteaseLyricUrlForSong(song));
+  return candidates;
+}
+function lyricPayloadToState(payload) {
+  payload = payload || {};
+  var yrcText = payload.yrc || payload.qrc || '';
+  var lyricText = payload.lyric || payload.lrc || payload.lxlyric || '';
+  var nativeLines = parseYrcText(yrcText || '');
+  var lrcLines = parseLyricText(lyricText || '');
+  if (!lrcLines.length) lrcLines = parseNeteaseJsonLyricText(lyricText || '');
+  var parsedLines = nativeLines.length ? nativeLines : lrcLines;
+  var usable = parsedLines.length && !parsedLines.every(function(line){ return isNoLyricText(line.text); });
+  var hasNativeKaraoke = nativeLines.some(function(line){ return line.words && line.words.length; });
+  var timingSource = hasNativeKaraoke ? 'yrc-word' : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? 'lrc-line' : 'fallback'));
+  var lines = withLyricFallback(parsedLines);
+  if (lines.length && lines[0].fallback) timingSource = 'fallback';
+  return { lines: lines, usable: !!usable, hasNativeKaraoke: hasNativeKaraoke, timingSource: timingSource };
+}
+async function fetchLyric(songOrId, token) {
+  var candidates = lyricEndpointCandidates(songOrId);
+  for (var i = 0; i < candidates.length; i++) {
+    var candidate = candidates[i];
+    try {
+      var r = await apiJson(candidate.url);
+      if (token !== trackSwitchToken) return;
+      var state = lyricPayloadToState(r);
+      if (!state.usable) {
+        console.warn('[LyricFallback] empty lyric from ' + candidate.label);
+        continue;
+      }
+      setOriginalLyricsState(state.lines, state.hasNativeKaraoke, state.timingSource);
+      applyPreferredLyricsForCurrent(true);
+      return;
+    } catch (e) {
+      if (token !== trackSwitchToken) return;
+      console.warn('[LyricFallback] ' + candidate.label, e && e.message ? e.message : e);
+    }
+  }
+  if (token !== trackSwitchToken) return;
+  var fallbackLines = withLyricFallback([]);
+  setOriginalLyricsState(fallbackLines, false, 'fallback');
+  applyPreferredLyricsForCurrent(true);
 }
 function currentLyricFallbackText() {
   var song = currentLyricSong() || {};
@@ -19326,7 +19385,22 @@ function finalizeLyricLineDurations(lines) {
   }
   return lines;
 }
-function parseLyricText(text) {
+function parseNeteaseJsonLyricText(text) {
+  var lines = [];
+  String(text || '').split(/\r?\n/).forEach(function(line){
+    line = line.trim();
+    if (!line || line.charAt(0) !== '{') return;
+    try {
+      var item = JSON.parse(line);
+      var parts = Array.isArray(item.c) ? item.c : [];
+      var lyricText = parts.map(function(part){ return part && part.tx || ''; }).join('').trim();
+      var t = Number(item.t) / 1000;
+      if (!lyricText || !isFinite(t)) return;
+      lines.push({ t: Math.max(0, t), text: lyricText, source: 'netease-json' });
+    } catch (e) {}
+  });
+  return finalizeLyricLineDurations(lines);
+}function parseLyricText(text) {
   var lines = [], reg = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?\]/g;
   text.split(/\r?\n/).forEach(function(line){
     var times = [], m;

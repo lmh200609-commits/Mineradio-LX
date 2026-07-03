@@ -2213,17 +2213,45 @@ async function handleLxSongUrl(params) {
   throw lastError || new Error('LX_URL_EMPTY');
 }
 
+function lxLyricTextFromValue(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value.lyric === 'string') return value.lyric;
+  if (typeof value.text === 'string') return value.text;
+  if (typeof value.lrc === 'string') return value.lrc;
+  return '';
+}
+
+function pickLxLyricText(raw, keys) {
+  const roots = [raw, raw && raw.data, raw && raw.body, raw && raw.result].filter(Boolean);
+  for (const root of roots) {
+    for (const key of keys) {
+      const text = lxLyricTextFromValue(root && root[key]);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
 async function handleLxLyric(params) {
   const out = await invokeLxSourceAction('lyric', params);
   const raw = out.result || {};
+  const lyric = typeof raw === 'string' ? raw : pickLxLyricText(raw, ['lyric', 'lrc', 'lxlyric']);
+  const tlyric = pickLxLyricText(raw, ['tlyric', 'tlryic', 'trans', 'translation']);
+  const rlyric = pickLxLyricText(raw, ['rlyric', 'roma', 'romalrc']);
+  const yrc = pickLxLyricText(raw, ['yrc', 'yrcLyric']);
+  const qrc = pickLxLyricText(raw, ['qrc', 'qrcLyric']);
   return {
     provider: 'lx',
     sourceKey: out.sourceKey,
     sourceName: out.source && out.source.name || out.sourceKey,
-    lyric: raw.lyric || raw.lrc || '',
-    tlyric: raw.tlyric || raw.tlryic || '',
-    rlyric: raw.rlyric || '',
-    lxlyric: raw.lxlyric || '',
+    lyric,
+    lrc: lyric,
+    tlyric,
+    rlyric,
+    lxlyric: pickLxLyricText(raw, ['lxlyric']) || lyric,
+    yrc,
+    qrc,
     raw,
   };
 }
