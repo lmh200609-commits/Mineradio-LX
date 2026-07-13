@@ -21,14 +21,14 @@ Windows 用户请进入本仓库 Releases 页面下载：
 当前推荐安装包：
 
 ```text
-Mineradio-LX-1.1.1-Setup.exe
+Mineradio-LX-1.1.3-Setup.exe
 ```
 
 也可以直接打开当前发布版下载页：
 
-[下载 Mineradio-LX-1.1.1-Setup.exe](https://github.com/lmh200609-commits/Mineradio-LX/releases/download/v1.1.1-lx.1/Mineradio-LX-1.1.1-Setup.exe)
+[下载 Mineradio-LX-1.1.3-Setup.exe](https://github.com/lmh200609-commits/Mineradio-LX/releases/download/v1.1.3-lx.1/Mineradio-LX-1.1.3-Setup.exe)
 
-请确认文件名包含 `Mineradio-LX`。如果下载到的是 `Mineradio-1.1.1-Setup.exe`，那通常是原版安装包，不是本二开版本。
+请确认文件名包含 `Mineradio-LX`。如果下载到的是 `Mineradio-1.1.3-Setup.exe`，那通常是原版安装包，不是本二开版本。
 
 ## 这个版本改了什么
 
