@@ -2775,7 +2775,6 @@ var lxPreferredSource = localStorage.getItem('mineradio_lx_preferred_source') ||
 var loginProvider = 'netease';
 var activeAccountProvider = 'netease';
 var dualAccountMode = false;
-var sodaFeedState = { open: false, loading: false, songs: [], index: -1, touchY: 0, wheelLockedUntil: 0 };
 var qqCookieBusy = false;
 var neteaseWebLoginBusy = false;
 var qqWebLoginBusy = false;
@@ -2850,7 +2849,7 @@ var homeWeatherLoadTimer = null;
 var homeWeatherLoadPromise = null;
 var weatherRadioStartBusy = false;
 var activeRadioContext = null;
-var homeRoamState = { active: false, loading: false, queries: [], cursor: 0, seen: {}, generation: 0 };
+var homeRoamState = { active: false, loading: false, queries: [], cursor: 0, seen: {}, generation: 0, lastAdded: 0 };
 var listenStatsState = loadListenStatsState();
 var listenSession = null;
 var appPerfMarks = [];
@@ -16172,18 +16171,22 @@ async function loadHomeRoamBatch(minCount) {
   homeRoamState.loading = true;
   renderHomeRoamSummary();
   var generation = homeRoamState.generation;
+  var targetQueue = playQueue;
+  var context = activeRadioContext;
   var added = 0;
   try {
-    while (homeRoamState.active && generation === homeRoamState.generation && added < (minCount || 12) && homeRoamState.cursor < homeRoamState.queries.length) {
+    while (homeRoamState.active && generation === homeRoamState.generation && targetQueue === playQueue && context === activeRadioContext && added < (minCount || 12) && homeRoamState.cursor < homeRoamState.queries.length) {
       var query = homeRoamState.queries[homeRoamState.cursor++];
       try {
         var songs = await fetchMusicSearchResults(query, 'song');
-        added += appendHomeRoamSongs(playQueue, songs, activeRadioContext);
+        if (!homeRoamState.active || generation !== homeRoamState.generation || targetQueue !== playQueue || context !== activeRadioContext) break;
+        added += appendHomeRoamSongs(targetQueue, songs.slice(0, 8), context);
       } catch (e) {
         console.warn('[HomeRoam]', query, e);
       }
     }
     if (added) {
+      homeRoamState.lastAdded = added;
       safeRenderQueuePanel('home-roam-extend');
       if (emptyHomeActive) renderHomeDiscover();
     }
@@ -16202,6 +16205,11 @@ function maybeExtendHomeRoamQueue() {
 }
 async function startHomeRoam() {
   if (homeRoamState.loading) return;
+  if (homeRoamState.active && activeRadioContext && activeRadioContext.source === 'home-roam' && playQueue.length) {
+    maybeExtendHomeRoamQueue();
+    showToast('漫游正在继续播放');
+    return;
+  }
   homeForcedOpen = false;
   homeSuppressed = false;
   setHomeControlsLocked(false);
@@ -16215,6 +16223,7 @@ async function startHomeRoam() {
   homeRoamState.cursor = 0;
   homeRoamState.seen = {};
   homeRoamState.generation += 1;
+  homeRoamState.lastAdded = 0;
   activeRadioContext = context;
   var nextQueue = [];
   appendHomeRoamSongs(nextQueue, homeDiscoverState.songs, context);
@@ -16243,8 +16252,8 @@ async function refreshHomeRoam() {
   try { await loadHomeDiscover(true); } catch (e) {}
   homeRoamState.queries = homeRoamQueries();
   homeRoamState.cursor = 0;
-  await loadHomeRoamBatch(12);
-  showToast('已把新推荐加入当前队列');
+  var added = await loadHomeRoamBatch(12);
+  showToast(added ? ('已加入 ' + added + ' 首新推荐') : '暂时没有更多不同的候选');
 }
 async function playHomeDaily() {
   homeForcedOpen = false;
@@ -17921,199 +17930,6 @@ async function doSearch(q, opts) {
 // ============================================================
 //  音频上下文 & 频谱分析
 // ============================================================
-// ============================================================
-// 刷歌模式
-// ============================================================
-function sodaFeedSongKey(song) {
-  return String((song && (song.id || song.mid || song.songmid || song.name)) || '');
-}
-function sodaFeedSourceLabel(song) {
-  var provider = songProviderKey(song || {});
-  if (provider === 'qq') return 'QQ MUSIC';
-  if (provider === 'netease') return 'NETEASE';
-  if (provider === 'lx') return 'LX SOURCE';
-  if (provider === 'local') return 'LOCAL';
-  return 'MINERADIO';
-}
-function collectSodaFeedSongs() {
-  var seen = {};
-  var result = [];
-  var groups = [
-    homeDiscoverState && homeDiscoverState.songs,
-    listenStatsState && listenStatsState.history,
-    playQueue,
-    playlist,
-  ];
-  groups.forEach(function(group){
-    (Array.isArray(group) ? group : []).forEach(function(song){
-      if (!song || song.type === 'podcast') return;
-      var key = sodaFeedSongKey(song);
-      if (!key || seen[key]) return;
-      seen[key] = true;
-      result.push(cloneSong(song));
-    });
-  });
-  return result;
-}
-function preloadSodaFeedCovers() {
-  if (!sodaFeedState.songs.length) return;
-  for (var step = 1; step <= 3; step++) {
-    var idx = (sodaFeedState.index + step) % sodaFeedState.songs.length;
-    var cover = songCoverSrc(sodaFeedState.songs[idx], 720);
-    if (!cover) continue;
-    var image = new Image();
-    image.src = cover;
-  }
-}
-function renderSodaFeed() {
-  var feed = document.getElementById('soda-feed');
-  var track = document.getElementById('soda-feed-track');
-  var empty = document.getElementById('soda-feed-empty');
-  var foot = document.getElementById('soda-feed-foot');
-  if (!feed) return;
-  var song = sodaFeedState.songs[sodaFeedState.index];
-  var hasSong = !!song;
-  if (track) track.style.display = hasSong ? '' : 'none';
-  if (empty) empty.classList.toggle('show', !hasSong && !sodaFeedState.loading);
-  if (foot) foot.textContent = hasSong ? ((sodaFeedState.index + 1) + ' / ' + sodaFeedState.songs.length) : (sodaFeedState.loading ? '正在整理你的音乐流' : '');
-  if (!hasSong) return;
-  var cover = songCoverSrc(song, 720);
-  var coverEl = document.getElementById('soda-feed-cover');
-  var artEl = document.getElementById('soda-feed-art');
-  if (coverEl) coverEl.style.backgroundImage = cover ? 'url("' + cssImageUrl(cover) + '")' : '';
-  if (artEl) artEl.style.backgroundImage = cover ? 'url("' + cssImageUrl(cover) + '")' : '';
-  var source = document.getElementById('soda-feed-source');
-  var title = document.getElementById('soda-feed-title');
-  var artist = document.getElementById('soda-feed-artist');
-  if (source) source.textContent = sodaFeedSourceLabel(song);
-  if (title) title.textContent = song.name || '未命名歌曲';
-  if (artist) artist.textContent = song.artist || song.artists || '未知歌手';
-  var like = document.getElementById('soda-feed-like');
-  if (like) like.classList.toggle('liked', isSongLiked(song));
-  var play = document.getElementById('soda-feed-play');
-  if (play) {
-    var isPlaying = !!(audio && !audio.paused && !audio.ended && currentIdx >= 0 && sodaFeedSongKey(playQueue[currentIdx]) === sodaFeedSongKey(song));
-    play.title = isPlaying ? '暂停' : '播放';
-    play.setAttribute('aria-label', isPlaying ? '暂停' : '播放');
-    play.innerHTML = isPlaying
-      ? '<svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>'
-      : '<svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>';
-  }
-  preloadSodaFeedCovers();
-}
-async function ensureSodaFeedSongs() {
-  sodaFeedState.songs = collectSodaFeedSongs();
-  if (sodaFeedState.songs.length) return sodaFeedState.songs;
-  sodaFeedState.loading = true;
-  renderSodaFeed();
-  try {
-    await loadHomeDiscover(true);
-  } catch (e) {}
-  sodaFeedState.songs = collectSodaFeedSongs();
-  sodaFeedState.loading = false;
-  return sodaFeedState.songs;
-}
-async function openSodaFeed() {
-  var feed = document.getElementById('soda-feed');
-  if (!feed) return;
-  sodaFeedState.open = true;
-  feed.classList.add('show');
-  feed.setAttribute('aria-hidden', 'false');
-  document.body.classList.add('soda-feed-open');
-  var button = document.getElementById('soda-feed-btn');
-  if (button) button.classList.add('active');
-  var songs = await ensureSodaFeedSongs();
-  if (songs.length) {
-    var currentKey = currentIdx >= 0 && playQueue[currentIdx] ? sodaFeedSongKey(playQueue[currentIdx]) : '';
-    var found = songs.findIndex(function(song){ return sodaFeedSongKey(song) === currentKey; });
-    sodaFeedState.index = found >= 0 ? found : 0;
-  } else {
-    sodaFeedState.index = -1;
-  }
-  renderSodaFeed();
-}
-function closeSodaFeed() {
-  sodaFeedState.open = false;
-  var feed = document.getElementById('soda-feed');
-  if (feed) {
-    feed.classList.remove('show');
-    feed.setAttribute('aria-hidden', 'true');
-  }
-  document.body.classList.remove('soda-feed-open');
-  var button = document.getElementById('soda-feed-btn');
-  if (button) button.classList.remove('active');
-}
-function openSodaFeedLogin() {
-  closeSodaFeed();
-  showUserModal();
-}
-function syncSodaFeedPlayback(song) {
-  if (!sodaFeedState.open || !song) return;
-  var key = sodaFeedSongKey(song);
-  var index = sodaFeedState.songs.findIndex(function(item){ return sodaFeedSongKey(item) === key; });
-  if (index >= 0) {
-    sodaFeedState.index = index;
-    renderSodaFeed();
-  }
-}
-function playSodaFeedIndex(index) {
-  var songs = sodaFeedState.songs;
-  if (!songs.length) return;
-  sodaFeedState.index = (index + songs.length) % songs.length;
-  var track = document.getElementById('soda-feed-track');
-  if (track) track.classList.add('changing');
-  renderSodaFeed();
-  setTimeout(function(){ if (track) track.classList.remove('changing'); }, 180);
-  playQueue = songs.map(cloneSong);
-  currentIdx = sodaFeedState.index;
-  safeRenderQueuePanel('soda-feed');
-  Promise.resolve(playQueueAt(currentIdx, { manual: true, context: { source: 'soda-feed', title: '刷歌' } })).finally(renderSodaFeed);
-}
-function moveSodaFeed(direction) {
-  if (!sodaFeedState.songs.length) return;
-  playSodaFeedIndex(sodaFeedState.index + (direction > 0 ? 1 : -1));
-}
-function toggleSodaFeedPlayback() {
-  if (!sodaFeedState.songs.length) return;
-  if (!playQueue.length || currentIdx < 0 || sodaFeedSongKey(playQueue[currentIdx]) !== sodaFeedSongKey(sodaFeedState.songs[sodaFeedState.index])) {
-    playSodaFeedIndex(sodaFeedState.index);
-    return;
-  }
-  Promise.resolve(togglePlay()).finally(renderSodaFeed);
-}
-function toggleSodaFeedLike() {
-  var song = sodaFeedState.songs[sodaFeedState.index];
-  if (!song) return;
-  Promise.resolve(toggleLikeSong(song)).finally(renderSodaFeed);
-}
-document.addEventListener('keydown', function(e){
-  if (!sodaFeedState.open || isTypingTarget(e.target)) return;
-  if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeSodaFeed(); return; }
-  if (e.code === 'ArrowDown' || e.code === 'PageDown') { e.preventDefault(); e.stopImmediatePropagation(); moveSodaFeed(1); return; }
-  if (e.code === 'ArrowUp' || e.code === 'PageUp') { e.preventDefault(); e.stopImmediatePropagation(); moveSodaFeed(-1); return; }
-  if (e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); toggleSodaFeedPlayback(); }
-}, true);
-document.addEventListener('DOMContentLoaded', function(){
-  var stage = document.getElementById('soda-feed-stage');
-  if (!stage) return;
-  stage.addEventListener('wheel', function(e){
-    if (!sodaFeedState.open || Math.abs(e.deltaY) < 28) return;
-    e.preventDefault();
-    var now = Date.now();
-    if (now < sodaFeedState.wheelLockedUntil) return;
-    sodaFeedState.wheelLockedUntil = now + 460;
-    moveSodaFeed(e.deltaY > 0 ? 1 : -1);
-  }, { passive: false });
-  stage.addEventListener('touchstart', function(e){
-    sodaFeedState.touchY = e.touches && e.touches[0] ? e.touches[0].clientY : 0;
-  }, { passive: true });
-  stage.addEventListener('touchend', function(e){
-    var end = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : sodaFeedState.touchY;
-    var delta = sodaFeedState.touchY - end;
-    if (Math.abs(delta) >= 54) moveSodaFeed(delta > 0 ? 1 : -1);
-  }, { passive: true });
-});
-
 function initAudio() {
   if (audioReady) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -19302,6 +19118,29 @@ function nextTrack() {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
+  var isRoamTail = playMode !== 'shuffle' && homeRoamState.active && activeRadioContext && activeRadioContext.source === 'home-roam' && currentIdx === playQueue.length - 1 && homeRoamState.cursor < homeRoamState.queries.length;
+  if (isRoamTail && homeRoamState.loading) {
+    var pendingIndex = currentIdx;
+    var pendingQueue = playQueue;
+    setTimeout(function(){
+      if (currentIdx === pendingIndex && playQueue === pendingQueue && homeRoamState.active) nextTrack();
+    }, 260);
+    return;
+  }
+  if (isRoamTail) {
+    var expectedIndex = currentIdx;
+    var expectedQueue = playQueue;
+    loadHomeRoamBatch(12).then(function(added){
+      if (currentIdx !== expectedIndex || playQueue !== expectedQueue || !homeRoamState.active) return;
+      currentIdx = added ? expectedIndex + 1 : 0;
+      Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
+    }).catch(function(){
+      if (currentIdx !== expectedIndex || playQueue !== expectedQueue) return;
+      currentIdx = 0;
+      Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
+    });
+    return;
+  }
   if (playMode === 'shuffle') currentIdx = Math.floor(Math.random() * playQueue.length);
   else currentIdx = (currentIdx + 1) % playQueue.length;
   Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
