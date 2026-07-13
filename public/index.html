@@ -837,6 +837,45 @@ body.login-guide-active #login-guide-canvas{opacity:1}
 .account-provider-chip.netease{border-color:rgba(217,91,103,.26);color:#ffd7dc;background:rgba(217,91,103,.08)}
 .account-provider-chip.qq{border-color:rgba(191,214,107,.26);color:#f3ffd1;background:rgba(191,214,107,.08)}
 .account-provider-chip.lx{border-color:rgba(112,221,255,.30);color:#d7f6ff;background:rgba(112,221,255,.08)}
+.account-provider-chip.soda{border-color:rgba(255,126,173,.34);color:#ffd8e9;background:rgba(255,126,173,.09)}
+.user-platform-tabs button.soda.active{background:rgba(255,126,173,.16);color:#ffd8e9}
+.soda-oauth-panel{display:none;margin-top:14px;padding:13px;border:1px solid rgba(255,126,173,.18);background:rgba(255,255,255,.03);text-align:left}
+.soda-oauth-panel.show{display:block}
+.soda-oauth-kicker{font-size:10px;letter-spacing:.12em;color:rgba(255,184,211,.74);margin-bottom:6px}
+.soda-oauth-status{min-height:34px;font-size:11px;line-height:1.5;color:rgba(255,255,255,.56)}
+.soda-oauth-actions{display:flex;gap:8px;margin-top:10px}
+.soda-oauth-actions .modal-btn{flex:1;padding:8px 10px}
+
+/* Full-screen vertical track feed. Tracks keep their original Mineradio providers. */
+#soda-feed{position:fixed;inset:0;z-index:40;display:none;overflow:hidden;background:#08090b;color:#fff;isolation:isolate}
+#soda-feed.show{display:block}
+body.soda-feed-open #top-right,body.soda-feed-open #search-area,body.soda-feed-open #fx-fab,body.soda-feed-open #fx-fab-hide-btn,body.soda-feed-open #bottom-bar,body.soda-feed-open #thumb-wrap{opacity:0!important;pointer-events:none!important}
+.soda-feed-art{position:absolute;inset:-34px;background-position:center;background-size:cover;filter:blur(28px) brightness(.33) saturate(1.15);transform:scale(1.12);opacity:.88}
+.soda-feed-shade{position:absolute;inset:0;background:rgba(4,5,7,.54)}
+.soda-feed-shell{position:relative;z-index:1;display:grid;grid-template-rows:auto 1fr auto;min-height:100%;padding:24px 30px 28px;touch-action:none}
+.soda-feed-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.soda-feed-label{display:flex;align-items:center;gap:9px;min-width:0;font-size:11px;font-weight:760;letter-spacing:.14em;color:rgba(255,255,255,.78);text-transform:uppercase}
+.soda-feed-label i{display:block;width:8px;height:8px;border-radius:50%;background:#ff7ead;box-shadow:0 0 0 4px rgba(255,126,173,.13)}
+.soda-feed-close{width:40px;height:40px;border:1px solid rgba(255,255,255,.13);border-radius:50%;background:rgba(0,0,0,.18);color:rgba(255,255,255,.72);display:grid;place-items:center;cursor:pointer;font:24px/1 inherit;transition:background .18s,border-color .18s,color .18s}
+.soda-feed-close:hover{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.30);color:#fff}
+.soda-feed-stage{display:grid;place-items:center;min-height:0;padding:22px 0}
+.soda-feed-track{width:min(420px,72vw);display:grid;justify-items:center;text-align:center;transform:translateY(-6px);transition:opacity .22s,transform .22s}
+.soda-feed-track.changing{opacity:.22;transform:translateY(-20px)}
+.soda-feed-cover{width:min(420px,72vw);aspect-ratio:1;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05) center/cover no-repeat;box-shadow:0 28px 70px rgba(0,0,0,.42)}
+.soda-feed-source{margin-top:18px;color:rgba(255,184,211,.88);font-size:10px;font-weight:760;letter-spacing:.14em;text-transform:uppercase}
+.soda-feed-title{width:100%;margin-top:7px;font-size:clamp(20px,3vw,29px);font-weight:760;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.soda-feed-artist{width:100%;margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.soda-feed-actions{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:22px}
+.soda-feed-action{width:44px;height:44px;border:1px solid rgba(255,255,255,.13);border-radius:50%;background:rgba(0,0,0,.18);color:rgba(255,255,255,.82);display:grid;place-items:center;cursor:pointer;transition:background .18s,border-color .18s,transform .18s}
+.soda-feed-action:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.34);transform:translateY(-1px)}
+.soda-feed-action.liked{color:#ff7ead;border-color:rgba(255,126,173,.55);background:rgba(255,126,173,.12)}
+.soda-feed-action.primary{width:58px;height:58px;border-color:rgba(255,126,173,.58);background:#ff7ead;color:#231017;box-shadow:0 14px 38px rgba(255,126,173,.26)}
+.soda-feed-action.primary:hover{background:#ff9ac4;color:#17080f}
+.soda-feed-foot{display:flex;align-items:center;justify-content:center;min-height:36px;color:rgba(255,255,255,.32);font-size:10px;letter-spacing:.10em;text-transform:uppercase}
+.soda-feed-empty{display:none;max-width:360px;text-align:center;color:rgba(255,255,255,.68);font-size:13px;line-height:1.6}
+.soda-feed-empty.show{display:block}
+.soda-feed-empty button{margin-top:16px;padding:9px 13px;border:1px solid rgba(255,126,173,.44);background:rgba(255,126,173,.12);color:#ffd8e9;font:700 12px inherit;cursor:pointer}
+@media (max-width:720px){.soda-feed-shell{padding:18px 18px 20px}.soda-feed-track,.soda-feed-cover{width:min(390px,84vw)}.soda-feed-cover{max-height:52vh}.soda-feed-title{font-size:22px}.soda-feed-foot{font-size:9px}}
 .account-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 .account-modal-actions .modal-btn{padding:8px 10px}
 .account-hint{margin-top:10px;font-size:11px;line-height:1.45;color:rgba(255,255,255,.38)}
@@ -2012,10 +2051,48 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   <button id="home-btn" class="icon-btn" onclick="goHome()" title="回到 Home" aria-label="回到 Home">
     <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M3 10.8 12 3l9 7.8"/><path d="M5 10v10h14V10"/><path d="M9.5 20v-5h5v5"/></svg>
   </button>
+  <button id="soda-feed-btn" class="icon-btn" onclick="openSodaFeed()" title="刷歌" aria-label="打开刷歌模式">
+    <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M8 4v16"/><path d="M16 4v16"/><path d="m5 8 3-4 3 4"/><path d="m13 16 3 4 3-4"/></svg>
+  </button>
   <button id="user-btn" class="icon-btn logged-out" onclick="onUserBtnClick()" title="登录账号">
     <span class="login-word">登录</span>
   </button>
 </div>
+
+<section id="soda-feed" aria-hidden="true">
+  <div id="soda-feed-art" class="soda-feed-art"></div>
+  <div class="soda-feed-shade"></div>
+  <div class="soda-feed-shell">
+    <header class="soda-feed-head">
+      <div class="soda-feed-label"><i></i><span>刷歌</span></div>
+      <button class="soda-feed-close" type="button" onclick="closeSodaFeed()" aria-label="关闭刷歌">×</button>
+    </header>
+    <main class="soda-feed-stage" id="soda-feed-stage">
+      <article id="soda-feed-track" class="soda-feed-track">
+        <div id="soda-feed-cover" class="soda-feed-cover"></div>
+        <div id="soda-feed-source" class="soda-feed-source"></div>
+        <div id="soda-feed-title" class="soda-feed-title"></div>
+        <div id="soda-feed-artist" class="soda-feed-artist"></div>
+        <div class="soda-feed-actions">
+          <button id="soda-feed-like" class="soda-feed-action" type="button" onclick="toggleSodaFeedLike()" title="喜欢" aria-label="喜欢">
+            <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20.8 4.8a5.5 5.5 0 0 0-7.8 0L12 5.8l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.4 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+          </button>
+          <button class="soda-feed-action" type="button" onclick="moveSodaFeed(-1)" title="上一首" aria-label="上一首">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="m19 20-8-8 8-8"/><path d="m11 20-8-8 8-8"/></svg>
+          </button>
+          <button id="soda-feed-play" class="soda-feed-action primary" type="button" onclick="toggleSodaFeedPlayback()" title="播放" aria-label="播放">
+            <svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>
+          </button>
+          <button class="soda-feed-action" type="button" onclick="moveSodaFeed(1)" title="下一首" aria-label="下一首">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="m5 4 8 8-8 8"/><path d="m13 4 8 8-8 8"/></svg>
+          </button>
+        </div>
+      </article>
+      <div id="soda-feed-empty" class="soda-feed-empty">登录网易云或 QQ 后即可从现有推荐与播放队列生成刷歌流。<br><button type="button" onclick="openSodaFeedLogin()">登录音乐账号</button></div>
+    </main>
+    <footer id="soda-feed-foot" class="soda-feed-foot"></footer>
+  </div>
+</section>
 
 <button id="fx-fab" title="视觉控制台">
   <svg width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M4 7h8"/><path d="M16 7h4"/><circle cx="14" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></svg>
@@ -2530,6 +2607,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
       <button id="user-provider-netease" class="netease active" type="button" onclick="setActiveAccountProvider('netease')">网易云</button>
       <button id="user-provider-qq" class="qq" type="button" onclick="setActiveAccountProvider('qq')">QQ 音乐</button>
       <button id="user-provider-lx" class="lx" type="button" onclick="setActiveAccountProvider('lx')">落雪</button>
+      <button id="user-provider-soda" class="soda" type="button" onclick="setActiveAccountProvider('soda')">汽水</button>
       <button id="user-provider-both" class="both" type="button" onclick="enableDualAccountView()">我两个都要</button>
     </div>
     <div class="account-modal-actions">
@@ -2537,6 +2615,14 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
       <button id="account-add-qq" class="modal-btn" onclick="openProviderLogin('qq')">补登 QQ 音乐</button>
     </div>
     <div id="account-hint" class="account-hint">QQ 音乐真实登录暂未接入，当前先预览双平台账号交互。</div>
+    <div id="soda-oauth-panel" class="soda-oauth-panel">
+      <div class="soda-oauth-kicker">OFFICIAL DOUYIN OAUTH</div>
+      <div id="soda-oauth-status" class="soda-oauth-status"></div>
+      <div class="soda-oauth-actions">
+        <button id="soda-oauth-connect" class="modal-btn primary" type="button" onclick="beginSodaOAuth()">官方授权</button>
+        <button id="soda-oauth-disconnect" class="modal-btn" type="button" onclick="disconnectSodaOAuth()">取消关联</button>
+      </div>
+    </div>
     <div class="lx-source-panel">
       <div class="lx-source-head">
         <div class="lx-source-title">落雪音源</div>
@@ -2741,6 +2827,8 @@ var playlist = [], playQueue = [], currentIdx = -1, playing = false, playToggleB
 var searchMode = 'song', podcastResults = [], podcastPrograms = [], podcastCurrentRadio = null;
 var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '无VIP' };
 var qqLoginStatus = { provider: 'qq', loggedIn: false, preview: false, nickname: 'QQ 音乐', userId: '', avatar: '', vipType: 0 };
+var sodaLoginStatus = { provider: 'douyin', configured: false, loggedIn: false, nickname: '抖音账号', userId: '', avatar: '', message: '' };
+var sodaOAuthPollTimer = null;
 var qqLoginAutoRefreshTimer = null;
 var qqLoginWasLoggedIn = false;
 var lxSourceStatus = { enabled: false, loaded: false, error: '', metadata: null, sources: {} };
@@ -2750,6 +2838,7 @@ var lxPreferredSource = localStorage.getItem('mineradio_lx_preferred_source') ||
 var loginProvider = 'netease';
 var activeAccountProvider = 'netease';
 var dualAccountMode = false;
+var sodaFeedState = { open: false, loading: false, songs: [], index: -1, touchY: 0, wheelLockedUntil: 0 };
 var qqCookieBusy = false;
 var neteaseWebLoginBusy = false;
 var qqWebLoginBusy = false;
@@ -17782,6 +17871,199 @@ async function doSearch(q, opts) {
 // ============================================================
 //  音频上下文 & 频谱分析
 // ============================================================
+// ============================================================
+// 刷歌模式
+// ============================================================
+function sodaFeedSongKey(song) {
+  return String((song && (song.id || song.mid || song.songmid || song.name)) || '');
+}
+function sodaFeedSourceLabel(song) {
+  var provider = songProviderKey(song || {});
+  if (provider === 'qq') return 'QQ MUSIC';
+  if (provider === 'netease') return 'NETEASE';
+  if (provider === 'lx') return 'LX SOURCE';
+  if (provider === 'local') return 'LOCAL';
+  return 'MINERADIO';
+}
+function collectSodaFeedSongs() {
+  var seen = {};
+  var result = [];
+  var groups = [
+    homeDiscoverState && homeDiscoverState.songs,
+    listenStatsState && listenStatsState.history,
+    playQueue,
+    playlist,
+  ];
+  groups.forEach(function(group){
+    (Array.isArray(group) ? group : []).forEach(function(song){
+      if (!song || song.type === 'podcast') return;
+      var key = sodaFeedSongKey(song);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      result.push(cloneSong(song));
+    });
+  });
+  return result;
+}
+function preloadSodaFeedCovers() {
+  if (!sodaFeedState.songs.length) return;
+  for (var step = 1; step <= 3; step++) {
+    var idx = (sodaFeedState.index + step) % sodaFeedState.songs.length;
+    var cover = songCoverSrc(sodaFeedState.songs[idx], 720);
+    if (!cover) continue;
+    var image = new Image();
+    image.src = cover;
+  }
+}
+function renderSodaFeed() {
+  var feed = document.getElementById('soda-feed');
+  var track = document.getElementById('soda-feed-track');
+  var empty = document.getElementById('soda-feed-empty');
+  var foot = document.getElementById('soda-feed-foot');
+  if (!feed) return;
+  var song = sodaFeedState.songs[sodaFeedState.index];
+  var hasSong = !!song;
+  if (track) track.style.display = hasSong ? '' : 'none';
+  if (empty) empty.classList.toggle('show', !hasSong && !sodaFeedState.loading);
+  if (foot) foot.textContent = hasSong ? ((sodaFeedState.index + 1) + ' / ' + sodaFeedState.songs.length) : (sodaFeedState.loading ? '正在整理你的音乐流' : '');
+  if (!hasSong) return;
+  var cover = songCoverSrc(song, 720);
+  var coverEl = document.getElementById('soda-feed-cover');
+  var artEl = document.getElementById('soda-feed-art');
+  if (coverEl) coverEl.style.backgroundImage = cover ? 'url("' + cssImageUrl(cover) + '")' : '';
+  if (artEl) artEl.style.backgroundImage = cover ? 'url("' + cssImageUrl(cover) + '")' : '';
+  var source = document.getElementById('soda-feed-source');
+  var title = document.getElementById('soda-feed-title');
+  var artist = document.getElementById('soda-feed-artist');
+  if (source) source.textContent = sodaFeedSourceLabel(song);
+  if (title) title.textContent = song.name || '未命名歌曲';
+  if (artist) artist.textContent = song.artist || song.artists || '未知歌手';
+  var like = document.getElementById('soda-feed-like');
+  if (like) like.classList.toggle('liked', isSongLiked(song));
+  var play = document.getElementById('soda-feed-play');
+  if (play) {
+    var isPlaying = !!(audio && !audio.paused && !audio.ended && currentIdx >= 0 && sodaFeedSongKey(playQueue[currentIdx]) === sodaFeedSongKey(song));
+    play.title = isPlaying ? '暂停' : '播放';
+    play.setAttribute('aria-label', isPlaying ? '暂停' : '播放');
+    play.innerHTML = isPlaying
+      ? '<svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>'
+      : '<svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>';
+  }
+  preloadSodaFeedCovers();
+}
+async function ensureSodaFeedSongs() {
+  sodaFeedState.songs = collectSodaFeedSongs();
+  if (sodaFeedState.songs.length) return sodaFeedState.songs;
+  sodaFeedState.loading = true;
+  renderSodaFeed();
+  try {
+    await loadHomeDiscover(true);
+  } catch (e) {}
+  sodaFeedState.songs = collectSodaFeedSongs();
+  sodaFeedState.loading = false;
+  return sodaFeedState.songs;
+}
+async function openSodaFeed() {
+  var feed = document.getElementById('soda-feed');
+  if (!feed) return;
+  sodaFeedState.open = true;
+  feed.classList.add('show');
+  feed.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('soda-feed-open');
+  var button = document.getElementById('soda-feed-btn');
+  if (button) button.classList.add('active');
+  var songs = await ensureSodaFeedSongs();
+  if (songs.length) {
+    var currentKey = currentIdx >= 0 && playQueue[currentIdx] ? sodaFeedSongKey(playQueue[currentIdx]) : '';
+    var found = songs.findIndex(function(song){ return sodaFeedSongKey(song) === currentKey; });
+    sodaFeedState.index = found >= 0 ? found : 0;
+  } else {
+    sodaFeedState.index = -1;
+  }
+  renderSodaFeed();
+}
+function closeSodaFeed() {
+  sodaFeedState.open = false;
+  var feed = document.getElementById('soda-feed');
+  if (feed) {
+    feed.classList.remove('show');
+    feed.setAttribute('aria-hidden', 'true');
+  }
+  document.body.classList.remove('soda-feed-open');
+  var button = document.getElementById('soda-feed-btn');
+  if (button) button.classList.remove('active');
+}
+function openSodaFeedLogin() {
+  closeSodaFeed();
+  showUserModal();
+}
+function syncSodaFeedPlayback(song) {
+  if (!sodaFeedState.open || !song) return;
+  var key = sodaFeedSongKey(song);
+  var index = sodaFeedState.songs.findIndex(function(item){ return sodaFeedSongKey(item) === key; });
+  if (index >= 0) {
+    sodaFeedState.index = index;
+    renderSodaFeed();
+  }
+}
+function playSodaFeedIndex(index) {
+  var songs = sodaFeedState.songs;
+  if (!songs.length) return;
+  sodaFeedState.index = (index + songs.length) % songs.length;
+  var track = document.getElementById('soda-feed-track');
+  if (track) track.classList.add('changing');
+  renderSodaFeed();
+  setTimeout(function(){ if (track) track.classList.remove('changing'); }, 180);
+  playQueue = songs.map(cloneSong);
+  currentIdx = sodaFeedState.index;
+  safeRenderQueuePanel('soda-feed');
+  Promise.resolve(playQueueAt(currentIdx, { manual: true, context: { source: 'soda-feed', title: '刷歌' } })).finally(renderSodaFeed);
+}
+function moveSodaFeed(direction) {
+  if (!sodaFeedState.songs.length) return;
+  playSodaFeedIndex(sodaFeedState.index + (direction > 0 ? 1 : -1));
+}
+function toggleSodaFeedPlayback() {
+  if (!sodaFeedState.songs.length) return;
+  if (!playQueue.length || currentIdx < 0 || sodaFeedSongKey(playQueue[currentIdx]) !== sodaFeedSongKey(sodaFeedState.songs[sodaFeedState.index])) {
+    playSodaFeedIndex(sodaFeedState.index);
+    return;
+  }
+  Promise.resolve(togglePlay()).finally(renderSodaFeed);
+}
+function toggleSodaFeedLike() {
+  var song = sodaFeedState.songs[sodaFeedState.index];
+  if (!song) return;
+  Promise.resolve(toggleLikeSong(song)).finally(renderSodaFeed);
+}
+document.addEventListener('keydown', function(e){
+  if (!sodaFeedState.open || isTypingTarget(e.target)) return;
+  if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeSodaFeed(); return; }
+  if (e.code === 'ArrowDown' || e.code === 'PageDown') { e.preventDefault(); e.stopImmediatePropagation(); moveSodaFeed(1); return; }
+  if (e.code === 'ArrowUp' || e.code === 'PageUp') { e.preventDefault(); e.stopImmediatePropagation(); moveSodaFeed(-1); return; }
+  if (e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); toggleSodaFeedPlayback(); }
+}, true);
+document.addEventListener('DOMContentLoaded', function(){
+  var stage = document.getElementById('soda-feed-stage');
+  if (!stage) return;
+  stage.addEventListener('wheel', function(e){
+    if (!sodaFeedState.open || Math.abs(e.deltaY) < 28) return;
+    e.preventDefault();
+    var now = Date.now();
+    if (now < sodaFeedState.wheelLockedUntil) return;
+    sodaFeedState.wheelLockedUntil = now + 460;
+    moveSodaFeed(e.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
+  stage.addEventListener('touchstart', function(e){
+    sodaFeedState.touchY = e.touches && e.touches[0] ? e.touches[0].clientY : 0;
+  }, { passive: true });
+  stage.addEventListener('touchend', function(e){
+    var end = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : sodaFeedState.touchY;
+    var delta = sodaFeedState.touchY - end;
+    if (Math.abs(delta) >= 54) moveSodaFeed(delta > 0 ? 1 : -1);
+  }, { passive: true });
+});
+
 function initAudio() {
   if (audioReady) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -18610,6 +18892,7 @@ async function playQueueAt(idx, opts) {
   homeForcedOpen = false;
   if (!opts.preserveHomeState) homeSuppressed = false;
   currentIdx = idx;
+  syncSodaFeedPlayback(playQueue[idx]);
   trackSwitchToken++;
   markPlayPhase('cancel-previous-track');
   cancelBeatAnalysisTimer();
@@ -23551,11 +23834,13 @@ function onUserBtnClick() {
 }
 function platformMeta(provider) {
   if (provider === 'lx') return { key: 'lx', short: 'LX', label: '落雪音源', app: 'LX Source', dot: 'lx' };
+  if (provider === 'soda') return { key: 'soda', short: 'S', label: '汽水账号', app: '官方 OAuth', dot: 'soda' };
   if (provider === 'qq') return { key: 'qq', short: 'QQ', label: 'QQ 音乐', app: 'QQ 音乐 App', dot: 'qq' };
   return { key: 'netease', short: 'NE', label: '网易云音乐', app: '网易云音乐 App', dot: 'netease' };
 }
 function platformStatus(provider) {
   if (provider === 'lx') return lxPlatformStatus();
+  if (provider === 'soda') return sodaLoginStatus;
   return provider === 'qq' ? qqLoginStatus : loginStatus;
 }
 function lxPlatformStatus() {
@@ -23575,7 +23860,7 @@ function lxPlatformStatus() {
   };
 }
 function isAccountProvider(provider) {
-  return provider === 'netease' || provider === 'qq';
+  return provider === 'netease' || provider === 'qq' || provider === 'soda';
 }
 function providerVipType(provider, status) {
   status = status || platformStatus(provider) || {};
@@ -23616,6 +23901,7 @@ function hasAnyPlatformLogin() {
 }
 function firstLoggedProvider() {
   if (activeAccountProvider === 'lx' && (lxSourceIsReady() || !hasAnyPlatformLogin())) return 'lx';
+  if (activeAccountProvider === 'soda' && hasPlatformLogin('soda')) return 'soda';
   if (hasPlatformLogin(activeAccountProvider)) return activeAccountProvider;
   if (hasPlatformLogin('netease')) return 'netease';
   if (hasPlatformLogin('qq')) return 'qq';
@@ -23859,8 +24145,8 @@ function providerAvatarSrc(provider, status) {
   status = status || platformStatus(provider) || {};
   if (status.avatar) return avatarSrc(status.avatar);
   var meta = platformMeta(provider);
-  var fill = provider === 'lx' ? '#70ddff' : (provider === 'qq' ? '#bfd66b' : '#d95b67');
-  var bg = provider === 'lx' ? '#07141a' : (provider === 'qq' ? '#11150b' : '#180b0f');
+  var fill = provider === 'lx' ? '#70ddff' : (provider === 'qq' ? '#bfd66b' : (provider === 'soda' ? '#ff7ead' : '#d95b67'));
+  var bg = provider === 'lx' ? '#07141a' : (provider === 'qq' ? '#11150b' : (provider === 'soda' ? '#1a0911' : '#180b0f'));
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="48" fill="' + bg + '"/><circle cx="48" cy="48" r="34" fill="' + fill + '" opacity=".16"/><text x="48" y="56" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="' + fill + '">' + meta.short + '</text></svg>';
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
@@ -23963,6 +24249,89 @@ function startQQLoginStatusAutoRefresh() {
     refreshQQLoginStatus().catch(function(e){ console.warn('QQ login auto refresh failed:', e); });
   }, 45000);
 }
+function normalizeSodaLoginStatus(info) {
+  return {
+    provider: 'douyin',
+    configured: !!(info && info.configured),
+    loggedIn: !!(info && info.loggedIn),
+    nickname: String(info && info.nickname || '抖音账号'),
+    userId: String(info && info.userId || ''),
+    avatar: String(info && info.avatar || ''),
+    linkedAt: Number(info && info.linkedAt) || 0,
+    message: String(info && info.message || ''),
+  };
+}
+async function refreshSodaLoginStatus() {
+  try {
+    sodaLoginStatus = normalizeSodaLoginStatus(await apiJson('/api/douyin/oauth/status?t=' + Date.now()));
+  } catch (e) {
+    sodaLoginStatus = normalizeSodaLoginStatus({ message: '无法读取官方 OAuth 状态' });
+  }
+  renderSodaOAuthPanel();
+  renderUserBtn();
+  return sodaLoginStatus;
+}
+function renderSodaOAuthPanel() {
+  var panel = document.getElementById('soda-oauth-panel');
+  var status = document.getElementById('soda-oauth-status');
+  var connect = document.getElementById('soda-oauth-connect');
+  var disconnect = document.getElementById('soda-oauth-disconnect');
+  var active = activeAccountProvider === 'soda';
+  if (panel) panel.classList.toggle('show', active);
+  if (!active) return;
+  if (status) status.textContent = sodaLoginStatus.loggedIn
+    ? ('已关联 ' + sodaLoginStatus.nickname + ' 的公开资料。此账号不提供汽水曲库或播放权限。')
+    : (sodaLoginStatus.message || '等待官方 OAuth 授权');
+  if (connect) {
+    connect.style.display = sodaLoginStatus.loggedIn ? 'none' : '';
+    connect.disabled = !sodaLoginStatus.configured;
+    connect.textContent = sodaLoginStatus.configured ? '官方授权' : '等待开放平台配置';
+  }
+  if (disconnect) disconnect.style.display = sodaLoginStatus.loggedIn ? '' : 'none';
+}
+async function beginSodaOAuth() {
+  if (!sodaLoginStatus.configured) {
+    showToast('请先在抖音开放平台配置官方 OAuth 凭据');
+    return;
+  }
+  try {
+    var result = await apiJson('/api/douyin/oauth/start?t=' + Date.now());
+    if (!result || !result.authorizeUrl) throw new Error(result && result.error || 'DOUYIN_OAUTH_START_FAILED');
+    var opener = window.desktopWindow && window.desktopWindow.openDouyinOAuth;
+    if (typeof opener === 'function') {
+      var opened = await opener(result.authorizeUrl);
+      if (!opened || !opened.ok) throw new Error(opened && opened.error || 'OPEN_DOUYIN_OAUTH_FAILED');
+    } else {
+      window.open(result.authorizeUrl, '_blank', 'noopener,noreferrer');
+    }
+    showToast('已在浏览器打开官方授权页面');
+    if (sodaOAuthPollTimer) clearInterval(sodaOAuthPollTimer);
+    var attempts = 0;
+    sodaOAuthPollTimer = setInterval(function(){
+      attempts += 1;
+      refreshSodaLoginStatus().then(function(status){
+        if (status.loggedIn || attempts >= 120) {
+          clearInterval(sodaOAuthPollTimer);
+          sodaOAuthPollTimer = null;
+          updateUserModalUi();
+          if (status.loggedIn) showToast('已关联官方公开资料');
+        }
+      });
+    }, 2000);
+  } catch (e) {
+    showToast('官方授权未能启动: ' + (e && e.message ? e.message : e));
+  }
+}
+async function disconnectSodaOAuth() {
+  try {
+    await apiJson('/api/douyin/oauth/logout', { method: 'POST' });
+    await refreshSodaLoginStatus();
+    updateUserModalUi();
+    showToast('已取消关联官方公开资料');
+  } catch (e) {
+    showToast('取消关联失败');
+  }
+}
 function renderUserBtn() {
   var btn = document.getElementById('user-btn');
   if (!btn) return;
@@ -23973,6 +24342,19 @@ function renderUserBtn() {
     btn.classList.remove('logged-out');
     btn.title = '账号信息 · 双平台登录状态';
     btn.innerHTML = renderTopAccountPill('netease') + renderTopAccountPill('qq');
+  } else if (activeAccountProvider === 'soda' && sodaLoginStatus.loggedIn) {
+    var sodaSt = platformStatus('soda');
+    var sodaMeta = platformMeta('soda');
+    btn.classList.add('logged-in');
+    btn.classList.remove('logged-out');
+    btn.title = sodaMeta.label + ' · 官方 OAuth 公开资料';
+    btn.innerHTML = '<img id="user-avatar" src="' + providerAvatarSrc('soda', sodaSt) + '">' +
+                    '<span>' + escHtml(sodaSt.nickname || sodaMeta.label) + '</span>';
+  } else if (activeAccountProvider === 'soda') {
+    btn.classList.remove('logged-in');
+    btn.classList.add('logged-out');
+    btn.title = '汽水账号 · 官方 OAuth 未关联';
+    btn.innerHTML = '<span class="login-word">汽水</span>';
   } else if (activeAccountProvider === 'lx' && lxSourceIsReady()) {
     var lxSt = platformStatus('lx');
     var lxMeta = platformMeta('lx');
@@ -24286,7 +24668,7 @@ async function checkQr() {
   } catch (e) { console.warn(e); }
 }
 function updateUserModalUi() {
-  if (activeAccountProvider !== 'lx') activeAccountProvider = firstLoggedProvider();
+  if (activeAccountProvider !== 'lx' && activeAccountProvider !== 'soda') activeAccountProvider = firstLoggedProvider();
   var st = platformStatus(activeAccountProvider);
   var meta = platformMeta(activeAccountProvider);
   var chip = document.getElementById('account-provider-chip');
@@ -24309,6 +24691,11 @@ function updateUserModalUi() {
       var lxDetail = st && st.sourceCount ? (st.sourceCount + ' 个子源') : '等待导入';
       vipEl.textContent = lxStateLabel + '  ·  ' + lxDetail + (st && st.version ? ('  ·  v' + st.version) : '');
       vipEl.style.color = lxSourceIsReady() ? 'rgba(112,221,255,0.82)' : 'rgba(255,255,255,0.5)';
+    } else if (activeAccountProvider === 'soda') {
+      vipEl.textContent = sodaLoginStatus.loggedIn
+        ? '已关联公开资料 · 不读取汽水曲库、播放记录或会员权益'
+        : '仅支持经过抖音开放平台审核的官方 OAuth 授权';
+      vipEl.style.color = sodaLoginStatus.loggedIn ? 'rgba(255,184,211,0.82)' : 'rgba(255,255,255,0.5)';
     } else if (activeAccountProvider === 'netease') {
       var neVipLevel = providerVipLevel('netease', st);
       var vipLabel = neVipLevel === 'svip' ? '网易云 SVIP' : (neVipLevel === 'vip' ? '网易云 VIP' : '普通用户');
@@ -24320,7 +24707,7 @@ function updateUserModalUi() {
       vipEl.style.color = hasProviderVip('qq', st) ? 'rgba(0,245,212,0.82)' : 'rgba(0,245,212,0.58)';
     }
   }
-  ['netease','qq','lx','both'].forEach(function(key){
+  ['netease','qq','lx','soda','both'].forEach(function(key){
     var btn = document.getElementById('user-provider-' + key);
     if (btn) btn.classList.toggle('active', key === 'both' ? dualAccountMode : (!dualAccountMode && activeAccountProvider === key));
   });
@@ -24328,22 +24715,34 @@ function updateUserModalUi() {
   if (addQQ) addQQ.textContent = hasPlatformLogin('qq') ? '查看 QQ 音乐' : '补登 QQ 音乐';
   if (logoutBtn) {
     logoutBtn.style.display = isAccountProvider(activeAccountProvider) && hasPlatformLogin(activeAccountProvider) ? '' : 'none';
-    logoutBtn.textContent = activeAccountProvider === 'qq' ? '退出 QQ 音乐' : '退出网易云';
+    logoutBtn.textContent = activeAccountProvider === 'qq' ? '退出 QQ 音乐' : (activeAccountProvider === 'soda' ? '取消汽水关联' : '退出网易云');
   }
-  if (hint) hint.textContent = activeAccountProvider === 'lx'
+  if (hint) hint.textContent = activeAccountProvider === 'soda'
+    ? '刷歌界面继续使用 Mineradio-LX 已接入的网易云、QQ 和落雪播放链路；官方授权只显示公开资料。'
+    : (activeAccountProvider === 'lx'
     ? '落雪是播放源，不是登录账号；搜索和歌单仍可来自网易云/QQ，播放地址会优先尝试落雪。'
     : (dualAccountMode
       ? '右上角已切换为双平台并排展示。'
-      : '可切换右上角展示的平台；“我两个都要”会并排放两个登录状态。');
+      : '可切换右上角展示的平台；“我两个都要”会并排放两个登录状态。'));
   renderLxPlaybackMode();
+  renderSodaOAuthPanel();
 }
 function showUserModal() {
   updateUserModalUi();
   refreshLxSourceStatus(true);
+  refreshSodaLoginStatus();
   openGsapModal(document.getElementById('user-modal'));
 }
 function closeUserModal() { closeGsapModal(document.getElementById('user-modal')); }
 function setActiveAccountProvider(provider) {
+  if (provider === 'soda') {
+    activeAccountProvider = 'soda';
+    dualAccountMode = false;
+    renderUserBtn();
+    updateUserModalUi();
+    refreshSodaLoginStatus();
+    return;
+  }
   if (provider === 'lx') {
     activeAccountProvider = 'lx';
     dualAccountMode = false;
@@ -24389,6 +24788,10 @@ function openProviderLogin(provider) {
   showLoginModal({ provider: provider });
 }
 async function logoutActiveAccount() {
+  if (activeAccountProvider === 'soda') {
+    await disconnectSodaOAuth();
+    return;
+  }
   if (activeAccountProvider === 'qq') {
     try { await apiJson('/api/qq/logout'); } catch (e) {}
     try {
@@ -27128,7 +27531,7 @@ if (fx.floatLayer) createFloatLayer();
 if (fx.particleLyrics) createLyricsParticles();
 if (fx.backCover) createBackCoverLayer();
 initIdleGuideCanvas();
-var startupLoginStatusPromise = Promise.all([refreshLoginStatus(), refreshQQLoginStatus()]);
+var startupLoginStatusPromise = Promise.all([refreshLoginStatus(), refreshQQLoginStatus(), refreshSodaLoginStatus()]);
 refreshLxSourceStatus(true);
 startQQLoginStatusAutoRefresh();
 if (startupLoginStatusPromise && startupLoginStatusPromise.then) {

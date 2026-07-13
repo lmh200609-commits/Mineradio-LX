@@ -1176,6 +1176,19 @@ ipcMain.handle('qq-music-clear-login', async () => {
   return clearQQMusicLoginSession();
 });
 
+ipcMain.handle('mineradio-open-douyin-oauth', async (_event, url) => {
+  try {
+    const target = new URL(String(url || ''));
+    if (target.protocol !== 'https:' || target.hostname !== 'open.douyin.com') {
+      return { ok: false, error: 'INVALID_DOUYIN_OAUTH_URL' };
+    }
+    await shell.openExternal(target.toString());
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message || 'OPEN_DOUYIN_OAUTH_FAILED' };
+  }
+});
+
 ipcMain.handle('mineradio-open-update-installer', async (_event, filePath) => {
   try {
     const target = path.resolve(String(filePath || ''));

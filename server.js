@@ -66,6 +66,13 @@ const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.jo
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
 const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\MineradioCache\\beatmaps';
 const USER_DATA_DIR = process.env.MINERADIO_USER_DATA_DIR || path.dirname(COOKIE_FILE || path.join(__dirname, '.cookie'));
+// Official Douyin OAuth is optional. Keep credentials outside the repository.
+const DOUYIN_OAUTH_CLIENT_KEY = String(process.env.MINERADIO_DOUYIN_CLIENT_KEY || '').trim();
+const DOUYIN_OAUTH_CLIENT_SECRET = String(process.env.MINERADIO_DOUYIN_CLIENT_SECRET || '').trim();
+const DOUYIN_OAUTH_REDIRECT_URI = String(process.env.MINERADIO_DOUYIN_REDIRECT_URI || '').trim();
+const DOUYIN_OAUTH_ACCOUNT_FILE = process.env.MINERADIO_DOUYIN_ACCOUNT_FILE || path.join(USER_DATA_DIR, 'douyin-oauth-profile.json');
+const DOUYIN_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const douyinOAuthPending = new Map();
 const LX_SOURCE_DIR = process.env.MINERADIO_LX_SOURCE_DIR || path.join(USER_DATA_DIR, 'lx-sources');
 const LX_SOURCE_CONFIG_FILE = process.env.MINERADIO_LX_SOURCE_CONFIG_FILE || path.join(LX_SOURCE_DIR, 'config.json');
 const LX_SOURCE_MAX_BYTES = 2 * 1024 * 1024;
@@ -212,6 +219,126 @@ function sendJSON(res, data, status) {
     'Expires': '0',
   });
   res.end(JSON.stringify(data));
+}
+function sendHTML(res, html, status) {
+  res.writeHead(status || 200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+  res.end(html);
+}
+function readDouyinOAuthProfile() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(DOUYIN_OAUTH_ACCOUNT_FILE, 'utf8'));
+    if (!raw || typeof raw !== 'object' || !raw.openId) return null;
+    return {
+      openId: String(raw.openId),
+      nickname: String(raw.nickname || '抖音账号'),
+      avatar: String(raw.avatar || ''),
+      linkedAt: Number(raw.linkedAt) || 0,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+let douyinOAuthProfile = readDouyinOAuthProfile();
+function writeDouyinOAuthProfile(profile) {
+  fs.mkdirSync(path.dirname(DOUYIN_OAUTH_ACCOUNT_FILE), { recursive: true });
+  fs.writeFileSync(DOUYIN_OAUTH_ACCOUNT_FILE, JSON.stringify(profile, null, 2), 'utf8');
+  douyinOAuthProfile = profile;
+}
+function clearDouyinOAuthProfile() {
+  douyinOAuthProfile = null;
+  try { fs.unlinkSync(DOUYIN_OAUTH_ACCOUNT_FILE); } catch (e) {
+    if (e && e.code !== 'ENOENT') throw e;
+  }
+}
+function isDouyinOAuthConfigured() {
+  return !!(DOUYIN_OAUTH_CLIENT_KEY && DOUYIN_OAUTH_CLIENT_SECRET && DOUYIN_OAUTH_REDIRECT_URI);
+}
+function douyinOAuthStatus() {
+  const profile = douyinOAuthProfile;
+  return {
+    provider: 'douyin',
+    configured: isDouyinOAuthConfigured(),
+    loggedIn: !!profile,
+    nickname: profile ? profile.nickname : '抖音账号',
+    userId: profile ? profile.openId : '',
+    avatar: profile ? profile.avatar : '',
+    linkedAt: profile ? profile.linkedAt : 0,
+    message: isDouyinOAuthConfigured()
+      ? (profile ? '已通过官方 OAuth 关联公开资料' : '可在浏览器中完成官方 OAuth 授权')
+      : '需要在抖音开放平台创建并审核应用后，配置 Client Key、Client Secret 与回调地址',
+  };
+}
+function createDouyinOAuthStart() {
+  if (!isDouyinOAuthConfigured()) {
+    const err = new Error('DOUYIN_OAUTH_NOT_CONFIGURED');
+    err.code = 'DOUYIN_OAUTH_NOT_CONFIGURED';
+    throw err;
+  }
+  const now = Date.now();
+  for (const [state, createdAt] of douyinOAuthPending.entries()) {
+    if (now - createdAt > DOUYIN_OAUTH_STATE_TTL_MS) douyinOAuthPending.delete(state);
+  }
+  const state = crypto.randomBytes(24).toString('hex');
+  douyinOAuthPending.set(state, now);
+  const params = new URLSearchParams({
+    client_key: DOUYIN_OAUTH_CLIENT_KEY,
+    response_type: 'code',
+    scope: 'user_info',
+    redirect_uri: DOUYIN_OAUTH_REDIRECT_URI,
+    state,
+  });
+  return {
+    authorizeUrl: 'https://open.douyin.com/platform/oauth/connect/?' + params.toString(),
+    expiresAt: now + DOUYIN_OAUTH_STATE_TTL_MS,
+  };
+}
+async function exchangeDouyinOAuthCode(code) {
+  const tokenParams = new URLSearchParams({
+    client_key: DOUYIN_OAUTH_CLIENT_KEY,
+    client_secret: DOUYIN_OAUTH_CLIENT_SECRET,
+    code: String(code || ''),
+    grant_type: 'authorization_code',
+  });
+  const tokenResp = await fetchWithTimeout('https://open.douyin.com/oauth/access_token/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: tokenParams.toString(),
+  }, 12000);
+  const tokenBody = await tokenResp.json();
+  const tokenData = tokenBody && tokenBody.data || {};
+  if (!tokenResp.ok || Number(tokenData.error_code || 0) !== 0 || !tokenData.access_token) {
+    throw new Error('DOUYIN_TOKEN_EXCHANGE_FAILED');
+  }
+  const infoResp = await fetchWithTimeout('https://open.douyin.com/oauth/userinfo/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'access-token': tokenData.access_token },
+    body: JSON.stringify({ open_id: tokenData.open_id || '' }),
+  }, 12000);
+  const infoBody = await infoResp.json();
+  const info = infoBody && infoBody.data || {};
+  if (!infoResp.ok || Number(info.error_code || 0) !== 0 || !(info.open_id || tokenData.open_id)) {
+    throw new Error('DOUYIN_USERINFO_FAILED');
+  }
+  const profile = {
+    openId: String(info.open_id || tokenData.open_id),
+    nickname: String(info.nickname || '抖音账号'),
+    avatar: String(info.avatar || ''),
+    linkedAt: Date.now(),
+  };
+  // Tokens are deliberately not persisted. This integration only uses public profile data.
+  writeDouyinOAuthProfile(profile);
+  return profile;
+}
+function douyinOAuthCallbackPage(ok, message) {
+  const title = ok ? '授权完成' : '授权未完成';
+  const color = ok ? '#8be9c5' : '#ffd49a';
+  const safeMessage = String(message || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#101214;color:#f6f7f8;font-family:system-ui,Segoe UI,Microsoft YaHei,sans-serif"><main style="width:min(420px,calc(100vw - 48px));padding:28px;border:1px solid rgba(255,255,255,.12);background:#181b1e"><p style="margin:0 0 12px;color:' + color + ';font-size:14px">' + title + '</p><h1 style="margin:0 0 14px;font-size:24px">Mineradio-LX</h1><p style="margin:0;color:rgba(255,255,255,.7);line-height:1.6">' + safeMessage + '</p></main><script>setTimeout(function(){window.close()},1800)</script></body></html>';
 }
 function readPackageInfo() {
   try {
@@ -3932,6 +4059,58 @@ const server = http.createServer(async (req, res) => {
         manifestOverride: !!UPDATE_CONFIG.manifest,
       },
     });
+    return;
+  }
+
+  if (pn === '/api/douyin/oauth/status') {
+    sendJSON(res, douyinOAuthStatus());
+    return;
+  }
+
+  if (pn === '/api/douyin/oauth/start') {
+    try {
+      sendJSON(res, { ok: true, ...createDouyinOAuthStart() });
+    } catch (err) {
+      sendJSON(res, { ok: false, error: err.code || err.message || 'DOUYIN_OAUTH_START_FAILED', ...douyinOAuthStatus() }, 400);
+    }
+    return;
+  }
+
+  if (pn === '/api/douyin/oauth/logout') {
+    if (req.method !== 'POST') {
+      sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+      return;
+    }
+    try {
+      clearDouyinOAuthProfile();
+      sendJSON(res, { ok: true, ...douyinOAuthStatus() });
+    } catch (err) {
+      sendJSON(res, { ok: false, error: err.message || 'DOUYIN_OAUTH_LOGOUT_FAILED' }, 500);
+    }
+    return;
+  }
+
+  if (pn === '/api/douyin/oauth/callback') {
+    const state = String(url.searchParams.get('state') || '');
+    const code = String(url.searchParams.get('code') || '');
+    const error = String(url.searchParams.get('error') || '');
+    const createdAt = douyinOAuthPending.get(state);
+    douyinOAuthPending.delete(state);
+    if (error) {
+      sendHTML(res, douyinOAuthCallbackPage(false, '授权被取消或平台返回了错误，请回到 Mineradio-LX 重试。'), 400);
+      return;
+    }
+    if (!createdAt || Date.now() - createdAt > DOUYIN_OAUTH_STATE_TTL_MS || !code) {
+      sendHTML(res, douyinOAuthCallbackPage(false, '授权链接已失效，请从 Mineradio-LX 重新发起授权。'), 400);
+      return;
+    }
+    try {
+      const profile = await exchangeDouyinOAuthCode(code);
+      sendHTML(res, douyinOAuthCallbackPage(true, '已关联 ' + profile.nickname + ' 的公开资料。可以关闭此页面并回到 Mineradio-LX。'));
+    } catch (err) {
+      console.error('[DouyinOAuth]', err);
+      sendHTML(res, douyinOAuthCallbackPage(false, '未能读取公开资料，请检查开放平台配置、回调地址和授权范围后重试。'), 500);
+    }
     return;
   }
 
