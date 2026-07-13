@@ -2,7 +2,8 @@
 
 Mineradio-LX 是基于 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) 二次开发的 Windows 桌面音乐播放器。这个版本的重点是为 Mineradio 增加落雪兼容自定义音源能力，让播放地址可以优先从用户配置的 LX 音源获取。用户依然可以登入网易云和qq音乐用来获取自己的歌单，只不过该版将免费开源的洛雪音源进行了接入，实现了音源免费播放。
 
-最新更新点：1.将汽水音乐的“刷音乐”加入Mineradio中，提升个性化推流和用户使用感受！！2.新增 Mineradio 本地音乐库，不登录网易云或 QQ 音乐也可以创建自己的歌单、收藏歌曲和记录播放历史；登录 QQ 音乐、网易云音乐后，原有歌单和个性化功能仍保持可用，并可导入到 Mineradio 本地歌单中。
+最新更新点：1.将汽水音乐的“刷音乐”加入Mineradio中，提升个性化推流和用户使用感受！！
+           2.新增 Mineradio 本地音乐库，不登录网易云或 QQ 音乐也可以创建自己的歌单、收藏歌曲和记录播放历史；登录 QQ 音乐、网易云音乐后，原有歌单和个性化功能仍保持可用，并可导入到 Mineradio 本地歌单中。
 
 本项目仓库：
 
@@ -21,7 +22,7 @@ Windows 用户请进入本仓库 Releases 页面下载：
 当前推荐安装包：
 
 ```text
-Mineradio-LX-1.2.0-Setup.exe
+Mineradio-LX-1.2.1-Setup.exe
 ```
 
 请确认文件名包含 `Mineradio-LX`。如果下载到的是 `Mineradio-1.1.3-Setup.exe`，那通常是原版安装包，不是本二开版本。
