@@ -1967,6 +1967,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         <div class="home-quick-row">
           <button id="home-roam-start" class="home-chip home-console-chip" type="button" onclick="startHomeRoam()">开始漫游</button>
           <button class="home-chip" type="button" onclick="refreshHomeRoam()">换一批</button>
+          <button id="home-roam-exploration" class="home-chip" type="button" onclick="cycleHomeRoamExploration()">探索：均衡</button>
         </div>
       </div>
     </div>
@@ -2843,6 +2844,7 @@ var homeDiscoverToken = 0;
 var homeVisualPresetActive = false;
 var homeVisualPrevPreset = 0;
 var HOME_LISTEN_STATS_KEY = 'mineradio-listen-stats-v1';
+var HOME_ROAM_PREF_KEY = 'mineradio-home-roam-prefs-v1';
 var HOME_WEATHER_CITY_KEY = 'mineradio-weather-city';
 var homeWeatherRadioState = { loading: false, loaded: false, city: localStorage.getItem(HOME_WEATHER_CITY_KEY) || '上海', weather: null, radio: null, error: '', updatedAt: 0 };
 var homeWeatherToken = 0;
@@ -2850,7 +2852,8 @@ var homeWeatherLoadTimer = null;
 var homeWeatherLoadPromise = null;
 var weatherRadioStartBusy = false;
 var activeRadioContext = null;
-var homeRoamState = { active: false, loading: false, queries: [], cursor: 0, seen: {}, generation: 0, lastAdded: 0 };
+var homeRoamState = { active: false, loading: false, queries: [], cursor: 0, seen: {}, generation: 0, lastAdded: 0, round: 0 };
+var homeRoamPrefs = loadHomeRoamPrefs();
 var listenStatsState = loadListenStatsState();
 var listenSession = null;
 var appPerfMarks = [];
@@ -16110,8 +16113,87 @@ async function waitForHomeDiscoverIdle(timeout) {
     await new Promise(function(resolve){ setTimeout(resolve, 80); });
   }
 }
+function loadHomeRoamPrefs() {
+  try {
+    var saved = JSON.parse(localStorage.getItem(HOME_ROAM_PREF_KEY) || '{}') || {};
+    return {
+      exploration: ['conservative', 'balanced', 'explore'].indexOf(saved.exploration) >= 0 ? saved.exploration : 'balanced',
+      skipped: saved.skipped && typeof saved.skipped === 'object' ? saved.skipped : {}
+    };
+  } catch (e) {
+    return { exploration: 'balanced', skipped: {} };
+  }
+}
+function saveHomeRoamPrefs() {
+  try { localStorage.setItem(HOME_ROAM_PREF_KEY, JSON.stringify(homeRoamPrefs)); } catch (e) {}
+}
+function homeRoamExplorationLabel() {
+  return homeRoamPrefs.exploration === 'conservative' ? '保守' : (homeRoamPrefs.exploration === 'explore' ? '探索' : '均衡');
+}
+function updateHomeRoamExplorationUi() {
+  var button = document.getElementById('home-roam-exploration');
+  if (button) button.textContent = '探索：' + homeRoamExplorationLabel();
+}
+function cycleHomeRoamExploration() {
+  var modes = ['conservative', 'balanced', 'explore'];
+  var index = modes.indexOf(homeRoamPrefs.exploration);
+  homeRoamPrefs.exploration = modes[(index + 1) % modes.length];
+  saveHomeRoamPrefs();
+  updateHomeRoamExplorationUi();
+  showToast('漫游探索度：' + homeRoamExplorationLabel());
+  if (homeRoamState.active) refreshHomeRoam();
+}
 function homeRoamSongKey(song) {
   return queueItemKey(song || {}) || String(song && (song.id || song.mid || song.songmid || song.name) || '');
+}
+function homeRoamArtistKey(song) {
+  return String(song && song.artist || '').split(/[\/&、,，]/)[0].trim();
+}
+function homeRoamSkipPenalty(key) {
+  var stamp = Number(homeRoamPrefs.skipped && homeRoamPrefs.skipped[key]) || 0;
+  if (!stamp) return 0;
+  var age = Date.now() - stamp;
+  if (age > 7 * 24 * 60 * 60 * 1000) {
+    delete homeRoamPrefs.skipped[key];
+    return 0;
+  }
+  return age < 24 * 60 * 60 * 1000 ? 220 : 70;
+}
+function recordHomeRoamSkip(song) {
+  if (!song) return;
+  var key = homeRoamSongKey(song);
+  if (!key) return;
+  homeRoamPrefs.skipped[key] = Date.now();
+  saveHomeRoamPrefs();
+}
+function homeRoamCandidateScore(song, context) {
+  var key = homeRoamSongKey(song);
+  if (!key) return -Infinity;
+  var stats = listenStatsState.songs && listenStatsState.songs[key] || {};
+  var artist = homeRoamArtistKey(song);
+  var artistStats = listenStatsState.artists && listenStatsState.artists[artist] || {};
+  var exploration = homeRoamPrefs.exploration;
+  var score = 0;
+  score += Math.min(42, Number(stats.plays || 0) * (exploration === 'conservative' ? 8 : 4));
+  score += Math.min(26, Number(artistStats.plays || 0) * (exploration === 'conservative' ? 5 : 2));
+  if (isSongLiked(song)) score += 36;
+  if (context && context.currentArtist && artist && artist === context.currentArtist) score -= exploration === 'conservative' ? 12 : 34;
+  if (context && context.recentArtists && artist && context.recentArtists.indexOf(artist) >= 0) score -= exploration === 'explore' ? 42 : 20;
+  score -= homeRoamSkipPenalty(key);
+  var age = Date.now() - Number(stats.lastPlayedAt || 0);
+  if (stats.lastPlayedAt && age < 3 * 60 * 60 * 1000) score -= 80;
+  else if (stats.lastPlayedAt && age < 24 * 60 * 60 * 1000) score -= 24;
+  var jitter = Math.random() * (exploration === 'explore' ? 46 : (exploration === 'balanced' ? 22 : 8));
+  return score + jitter;
+}
+function rankHomeRoamCandidates(songs) {
+  var recentArtists = playQueue.slice(Math.max(0, currentIdx - 2), currentIdx + 4).map(homeRoamArtistKey).filter(Boolean);
+  var current = currentIdx >= 0 && playQueue[currentIdx] || null;
+  var context = { currentArtist: homeRoamArtistKey(current), recentArtists: recentArtists };
+  return (Array.isArray(songs) ? songs : []).map(function(song){
+    return { song: song, score: homeRoamCandidateScore(song, context) };
+  }).filter(function(item){ return isFinite(item.score) && item.score > -180; })
+    .sort(function(a, b){ return b.score - a.score; }).map(function(item){ return item.song; });
 }
 function homeRoamQueries() {
   var queries = [];
@@ -16126,20 +16208,27 @@ function homeRoamQueries() {
       if (queries.indexOf(name) < 0) queries.push(name);
     });
   });
-  homeDiscoverState.songs.slice(0, 4).forEach(function(song){
+  homeDiscoverState.songs.slice(0, 6).forEach(function(song){
     var name = String(song && song.artist || '').split(/[\/&、,，]/)[0].trim();
     if (name && queries.indexOf(name) < 0) queries.push(name);
   });
-  ['华语流行', '轻音乐', 'R&B'].forEach(function(query){ if (queries.indexOf(query) < 0) queries.push(query); });
-  return queries.slice(0, 6);
+  Object.keys(listenStatsState.artists || {}).map(function(key){ return listenStatsState.artists[key]; }).sort(function(a, b){ return (b.plays - a.plays) || (b.lastPlayedAt - a.lastPlayedAt); }).slice(0, 5).forEach(function(item){
+    if (item.name && queries.indexOf(item.name) < 0) queries.push(item.name);
+  });
+  var discovery = homeRoamPrefs.exploration === 'conservative'
+    ? ['华语流行', '热门歌曲']
+    : (homeRoamPrefs.exploration === 'explore' ? ['独立流行', '电子音乐', 'R&B', '氛围音乐', '华语新歌'] : ['华语流行', '轻音乐', 'R&B', '流行音乐']);
+  discovery.forEach(function(query){ if (queries.indexOf(query) < 0) queries.push(query); });
+  return queries.slice(0, 14);
 }
 function renderHomeRoamSummary() {
   var summary = document.getElementById('home-roam-summary');
   var button = document.getElementById('home-roam-start');
+  updateHomeRoamExplorationUi();
   if (summary) {
     var listen = homeListenSummary();
     if (homeRoamState.active) {
-      summary.textContent = '漫游正在使用当前队列，并会在快播完时根据你的播放记录继续补歌。';
+      summary.textContent = '漫游正在按你的播放、收藏和跳过反馈持续补歌。';
     } else if (listen.topArtist) {
       summary.textContent = '从 ' + listen.topArtist.name + '、最近播放和现有推荐里，给你接着放。';
     } else if (homeDiscoverState.songs.length) {
@@ -16155,7 +16244,7 @@ function renderHomeRoamSummary() {
 }
 function appendHomeRoamSongs(target, songs, context) {
   var added = 0;
-  (Array.isArray(songs) ? songs : []).forEach(function(song){
+  rankHomeRoamCandidates(songs).forEach(function(song){
     if (!song || song.type === 'podcast') return;
     var key = homeRoamSongKey(song);
     if (!key || homeRoamState.seen[key]) return;
@@ -16175,13 +16264,24 @@ async function loadHomeRoamBatch(minCount) {
   var targetQueue = playQueue;
   var context = activeRadioContext;
   var added = 0;
+  var attempts = 0;
   try {
-    while (homeRoamState.active && generation === homeRoamState.generation && targetQueue === playQueue && context === activeRadioContext && added < (minCount || 12) && homeRoamState.cursor < homeRoamState.queries.length) {
+    if (homeRoamState.cursor >= homeRoamState.queries.length) {
+      homeRoamState.round += 1;
+      homeRoamState.queries = homeRoamQueries().map(function(query, index){
+        if (homeRoamState.round % 3 === 1 && index % 2 === 0) return query + ' 歌曲';
+        if (homeRoamState.round % 3 === 2 && index % 3 === 0) return query + ' 精选';
+        return query;
+      });
+      homeRoamState.cursor = 0;
+    }
+    while (homeRoamState.active && generation === homeRoamState.generation && targetQueue === playQueue && context === activeRadioContext && added < (minCount || 16) && homeRoamState.cursor < homeRoamState.queries.length && attempts < 5) {
       var query = homeRoamState.queries[homeRoamState.cursor++];
+      attempts += 1;
       try {
         var songs = await fetchMusicSearchResults(query, 'song');
         if (!homeRoamState.active || generation !== homeRoamState.generation || targetQueue !== playQueue || context !== activeRadioContext) break;
-        added += appendHomeRoamSongs(targetQueue, songs.slice(0, 8), context);
+        added += appendHomeRoamSongs(targetQueue, songs.slice(0, 18), context);
       } catch (e) {
         console.warn('[HomeRoam]', query, e);
       }
@@ -16201,8 +16301,8 @@ async function loadHomeRoamBatch(minCount) {
 }
 function maybeExtendHomeRoamQueue() {
   if (!homeRoamState.active || homeRoamState.loading || !playQueue.length) return;
-  if (currentIdx < playQueue.length - 4) return;
-  loadHomeRoamBatch(12);
+  if (playQueue.length - currentIdx > 12) return;
+  loadHomeRoamBatch(18);
 }
 async function startHomeRoam() {
   if (homeRoamState.loading) return;
@@ -16225,6 +16325,7 @@ async function startHomeRoam() {
   homeRoamState.seen = {};
   homeRoamState.generation += 1;
   homeRoamState.lastAdded = 0;
+  homeRoamState.round = 0;
   activeRadioContext = context;
   var nextQueue = [];
   appendHomeRoamSongs(nextQueue, homeDiscoverState.songs, context);
@@ -16232,7 +16333,7 @@ async function startHomeRoam() {
   if (currentIdx >= 0 && playQueue[currentIdx]) appendHomeRoamSongs(nextQueue, [playQueue[currentIdx]], context);
   playQueue = nextQueue;
   currentIdx = 0;
-  await loadHomeRoamBatch(18);
+  await loadHomeRoamBatch(24);
   if (!playQueue.length) {
     homeRoamState.active = false;
     renderHomeRoamSummary();
@@ -18690,12 +18791,17 @@ async function tryAutoPlaybackFallback(song, data, idx, token, opts) {
     return true;
   }
 }
-function handlePlaybackUnavailable(song, data) {
+function handlePlaybackUnavailable(song, data, idx, token) {
   hideLoading();
   forcePlaybackControlsInteractive();
   var provider = playbackLoginProvider(song);
   var restriction = (data && data.restriction) || {};
   var category = (data && data.reason) || restriction.category || '';
+  var isRoam = homeRoamState.active && activeRadioContext && activeRadioContext.source === 'home-roam';
+  if (isRoam && typeof idx === 'number') {
+    skipFailedQueueItem(idx, token, '当前候选不可播放，正在切换下一首。');
+    return;
+  }
   showToast(playbackRestrictionMessage(song, data));
   if (category === 'login_required' && provider) {
     setTimeout(function(){
@@ -18911,7 +19017,7 @@ async function playQueueAt(idx, opts) {
     }
     if (!data.url) {
       if (await tryAutoPlaybackFallback(song, data, idx, token, opts)) return;
-      handlePlaybackUnavailable(song, data);
+      handlePlaybackUnavailable(song, data, idx, token);
       return;
     }
     var resolvedQualityText = playbackResolvedQualityText(data);
@@ -18950,7 +19056,18 @@ async function playQueueAt(idx, opts) {
       if (token !== trackSwitchToken) return;
       finalizeListenSession(true);
       if (playMode === 'single') setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat: true }); }, 0);
-      else setTimeout(nextTrack, 0);
+      else setTimeout(function(){ nextTrack({ auto: true }); }, 0);
+    };
+    audio.onerror = function(){
+      if (token !== trackSwitchToken) return;
+      var isRoamFailure = homeRoamState.active && activeRadioContext && activeRadioContext.source === 'home-roam';
+      if (isRoamFailure) {
+        skipFailedQueueItem(idx, token, '音频加载失败，正在继续下一首。');
+      } else {
+        hideLoading();
+        forcePlaybackControlsInteractive();
+        showToast('音频加载失败，请切换下一首或更换音源');
+      }
     };
     scheduleAudioResumePosition(audio, opts.resumeAt, token);
     audio.load();
@@ -19020,6 +19137,10 @@ async function playQueueAt(idx, opts) {
     if (!playbackStarted) {
       if (isQQPlayback && await retryQQPlaybackWithCompatibleQuality(song, idx, token, opts, data, requestedQuality)) return;
       forcePlaybackControlsInteractive();
+      if (homeRoamState.active && activeRadioContext && activeRadioContext.source === 'home-roam') {
+        skipFailedQueueItem(idx, token, '播放未能启动，正在继续下一首。');
+        return;
+      }
       if (opts.manual) {
         showToast('播放启动失败，请重新选择歌曲');
       } else {
@@ -19138,10 +19259,17 @@ function setPlayIcon(p) {
     ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
     : '<path d="M8 5v14l11-7z"/>';
 }
-function nextTrack() {
+function nextTrack(opts) {
+  opts = opts || {};
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
+  var currentSong = currentIdx >= 0 ? playQueue[currentIdx] : null;
+  var isRoamCurrent = homeRoamState.active && activeRadioContext && activeRadioContext.source === 'home-roam';
+  if (isRoamCurrent && !opts.auto && currentSong && audio && audio.duration) {
+    var progress = (audio.currentTime || 0) / Math.max(1, audio.duration || 1);
+    if ((audio.currentTime || 0) < 32 || progress < 0.28) recordHomeRoamSkip(currentSong);
+  }
   var isRoamTail = playMode !== 'shuffle' && homeRoamState.active && activeRadioContext && activeRadioContext.source === 'home-roam' && currentIdx === playQueue.length - 1 && homeRoamState.cursor < homeRoamState.queries.length;
   if (isRoamTail && homeRoamState.loading) {
     var pendingIndex = currentIdx;
