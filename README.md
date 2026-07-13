@@ -1,4 +1,4 @@
-# Mineradio-LX 让音乐完全免费！（模拟汽水“刷音乐”界面+本地化改造）
+# Mineradio-LX 让音乐完全免费！（新增汽水“刷音乐”感+本地化改造）
 
 Mineradio-LX 是基于 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) 二次开发的 Windows 桌面音乐播放器。这个版本的重点是为 Mineradio 增加落雪兼容自定义音源能力，让播放地址可以优先从用户配置的 LX 音源获取。用户依然可以登入网易云和qq音乐用来获取自己的歌单，只不过该版将免费开源的洛雪音源进行了接入，实现了音源免费播放。
 
