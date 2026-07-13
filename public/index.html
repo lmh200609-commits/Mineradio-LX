@@ -16149,6 +16149,20 @@ function homeRoamSongKey(song) {
 function homeRoamArtistKey(song) {
   return String(song && song.artist || '').split(/[\/&、,，]/)[0].trim();
 }
+function homeRoamArtistIdentity(song) {
+  return homeRoamArtistKey(song).toLowerCase().replace(/\s+/g, ' ');
+}
+function homeRoamArtistCounts(songs) {
+  var counts = {};
+  (Array.isArray(songs) ? songs : []).forEach(function(song){
+    var artist = homeRoamArtistIdentity(song);
+    if (artist) counts[artist] = (counts[artist] || 0) + 1;
+  });
+  return counts;
+}
+function homeRoamArtistQueueCap() {
+  return homeRoamPrefs.exploration === 'conservative' ? 3 : 2;
+}
 function homeRoamSkipPenalty(key) {
   var stamp = Number(homeRoamPrefs.skipped && homeRoamPrefs.skipped[key]) || 0;
   if (!stamp) return 0;
@@ -16179,6 +16193,9 @@ function homeRoamCandidateScore(song, context) {
   if (isSongLiked(song)) score += 36;
   if (context && context.currentArtist && artist && artist === context.currentArtist) score -= exploration === 'conservative' ? 12 : 34;
   if (context && context.recentArtists && artist && context.recentArtists.indexOf(artist) >= 0) score -= exploration === 'explore' ? 42 : 20;
+  var queuedArtistCount = context && context.queuedArtists && context.queuedArtists[homeRoamArtistIdentity(song)] || 0;
+  if (queuedArtistCount) score -= queuedArtistCount * (exploration === 'conservative' ? 42 : 68);
+  else score += 10;
   score -= homeRoamSkipPenalty(key);
   var age = Date.now() - Number(stats.lastPlayedAt || 0);
   if (stats.lastPlayedAt && age < 3 * 60 * 60 * 1000) score -= 80;
@@ -16189,14 +16206,15 @@ function homeRoamCandidateScore(song, context) {
 function rankHomeRoamCandidates(songs) {
   var recentArtists = playQueue.slice(Math.max(0, currentIdx - 2), currentIdx + 4).map(homeRoamArtistKey).filter(Boolean);
   var current = currentIdx >= 0 && playQueue[currentIdx] || null;
-  var context = { currentArtist: homeRoamArtistKey(current), recentArtists: recentArtists };
+  var queueWindow = playQueue.slice(Math.max(0, currentIdx), currentIdx + 24);
+  var context = { currentArtist: homeRoamArtistKey(current), recentArtists: recentArtists, queuedArtists: homeRoamArtistCounts(queueWindow) };
   return (Array.isArray(songs) ? songs : []).map(function(song){
     return { song: song, score: homeRoamCandidateScore(song, context) };
   }).filter(function(item){ return isFinite(item.score) && item.score > -180; })
     .sort(function(a, b){ return b.score - a.score; }).map(function(item){ return item.song; });
 }
 function homeRoamQueries() {
-  var queries = [];
+  var artistQueries = [];
   var summary = homeListenSummary();
   var current = currentIdx >= 0 && playQueue[currentIdx] || null;
   [
@@ -16205,20 +16223,30 @@ function homeRoamQueries() {
     current && current.artist,
   ].forEach(function(value){
     String(value || '').split(/[\/&、,，]/).map(function(part){ return part.trim(); }).filter(Boolean).forEach(function(name){
-      if (queries.indexOf(name) < 0) queries.push(name);
+      if (artistQueries.indexOf(name) < 0) artistQueries.push(name);
     });
   });
   homeDiscoverState.songs.slice(0, 6).forEach(function(song){
     var name = String(song && song.artist || '').split(/[\/&、,，]/)[0].trim();
-    if (name && queries.indexOf(name) < 0) queries.push(name);
+    if (name && artistQueries.indexOf(name) < 0) artistQueries.push(name);
   });
   Object.keys(listenStatsState.artists || {}).map(function(key){ return listenStatsState.artists[key]; }).sort(function(a, b){ return (b.plays - a.plays) || (b.lastPlayedAt - a.lastPlayedAt); }).slice(0, 5).forEach(function(item){
-    if (item.name && queries.indexOf(item.name) < 0) queries.push(item.name);
+    if (item.name && artistQueries.indexOf(item.name) < 0) artistQueries.push(item.name);
   });
   var discovery = homeRoamPrefs.exploration === 'conservative'
     ? ['华语流行', '热门歌曲']
     : (homeRoamPrefs.exploration === 'explore' ? ['独立流行', '电子音乐', 'R&B', '氛围音乐', '华语新歌'] : ['华语流行', '轻音乐', 'R&B', '流行音乐']);
-  discovery.forEach(function(query){ if (queries.indexOf(query) < 0) queries.push(query); });
+  var queries = [];
+  while (artistQueries.length || discovery.length) {
+    if (artistQueries.length) {
+      var artistQuery = artistQueries.shift();
+      if (queries.indexOf(artistQuery) < 0) queries.push(artistQuery);
+    }
+    if (discovery.length) {
+      var discoveryQuery = discovery.shift();
+      if (queries.indexOf(discoveryQuery) < 0) queries.push(discoveryQuery);
+    }
+  }
   return queries.slice(0, 14);
 }
 function renderHomeRoamSummary() {
@@ -16244,14 +16272,24 @@ function renderHomeRoamSummary() {
 }
 function appendHomeRoamSongs(target, songs, context) {
   var added = 0;
+  var startIndex = target === playQueue ? Math.max(0, currentIdx) : 0;
+  var queuedArtists = homeRoamArtistCounts(target.slice(startIndex, startIndex + 24));
+  var batchArtists = {};
+  var queueCap = homeRoamArtistQueueCap();
   rankHomeRoamCandidates(songs).forEach(function(song){
     if (!song || song.type === 'podcast') return;
     var key = homeRoamSongKey(song);
     if (!key || homeRoamState.seen[key]) return;
+    var artist = homeRoamArtistIdentity(song);
+    if (artist && ((queuedArtists[artist] || 0) >= queueCap || (batchArtists[artist] || 0) >= 1)) return;
     homeRoamState.seen[key] = true;
     var cloned = cloneSong(song);
     cloned.radioContext = context;
     target.push(cloned);
+    if (artist) {
+      queuedArtists[artist] = (queuedArtists[artist] || 0) + 1;
+      batchArtists[artist] = (batchArtists[artist] || 0) + 1;
+    }
     added += 1;
   });
   return added;
