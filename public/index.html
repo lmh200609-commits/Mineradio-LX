@@ -846,36 +846,6 @@ body.login-guide-active #login-guide-canvas{opacity:1}
 .soda-oauth-actions{display:flex;gap:8px;margin-top:10px}
 .soda-oauth-actions .modal-btn{flex:1;padding:8px 10px}
 
-/* Full-screen vertical track feed. Tracks keep their original Mineradio providers. */
-#soda-feed{position:fixed;inset:0;z-index:40;display:none;overflow:hidden;background:#08090b;color:#fff;isolation:isolate}
-#soda-feed.show{display:block}
-body.soda-feed-open #top-right,body.soda-feed-open #search-area,body.soda-feed-open #fx-fab,body.soda-feed-open #fx-fab-hide-btn,body.soda-feed-open #bottom-bar,body.soda-feed-open #thumb-wrap{opacity:0!important;pointer-events:none!important}
-.soda-feed-art{position:absolute;inset:-34px;background-position:center;background-size:cover;filter:blur(28px) brightness(.33) saturate(1.15);transform:scale(1.12);opacity:.88}
-.soda-feed-shade{position:absolute;inset:0;background:rgba(4,5,7,.54)}
-.soda-feed-shell{position:relative;z-index:1;display:grid;grid-template-rows:auto 1fr auto;min-height:100%;padding:24px 30px 28px;touch-action:none}
-.soda-feed-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.soda-feed-label{display:flex;align-items:center;gap:9px;min-width:0;font-size:11px;font-weight:760;letter-spacing:.14em;color:rgba(255,255,255,.78);text-transform:uppercase}
-.soda-feed-label i{display:block;width:8px;height:8px;border-radius:50%;background:#ff7ead;box-shadow:0 0 0 4px rgba(255,126,173,.13)}
-.soda-feed-close{width:40px;height:40px;border:1px solid rgba(255,255,255,.13);border-radius:50%;background:rgba(0,0,0,.18);color:rgba(255,255,255,.72);display:grid;place-items:center;cursor:pointer;font:24px/1 inherit;transition:background .18s,border-color .18s,color .18s}
-.soda-feed-close:hover{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.30);color:#fff}
-.soda-feed-stage{display:grid;place-items:center;min-height:0;padding:22px 0}
-.soda-feed-track{width:min(420px,72vw);display:grid;justify-items:center;text-align:center;transform:translateY(-6px);transition:opacity .22s,transform .22s}
-.soda-feed-track.changing{opacity:.22;transform:translateY(-20px)}
-.soda-feed-cover{width:min(420px,72vw);aspect-ratio:1;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05) center/cover no-repeat;box-shadow:0 28px 70px rgba(0,0,0,.42)}
-.soda-feed-source{margin-top:18px;color:rgba(255,184,211,.88);font-size:10px;font-weight:760;letter-spacing:.14em;text-transform:uppercase}
-.soda-feed-title{width:100%;margin-top:7px;font-size:clamp(20px,3vw,29px);font-weight:760;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.soda-feed-artist{width:100%;margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.soda-feed-actions{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:22px}
-.soda-feed-action{width:44px;height:44px;border:1px solid rgba(255,255,255,.13);border-radius:50%;background:rgba(0,0,0,.18);color:rgba(255,255,255,.82);display:grid;place-items:center;cursor:pointer;transition:background .18s,border-color .18s,transform .18s}
-.soda-feed-action:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.34);transform:translateY(-1px)}
-.soda-feed-action.liked{color:#ff7ead;border-color:rgba(255,126,173,.55);background:rgba(255,126,173,.12)}
-.soda-feed-action.primary{width:58px;height:58px;border-color:rgba(255,126,173,.58);background:#ff7ead;color:#231017;box-shadow:0 14px 38px rgba(255,126,173,.26)}
-.soda-feed-action.primary:hover{background:#ff9ac4;color:#17080f}
-.soda-feed-foot{display:flex;align-items:center;justify-content:center;min-height:36px;color:rgba(255,255,255,.32);font-size:10px;letter-spacing:.10em;text-transform:uppercase}
-.soda-feed-empty{display:none;max-width:360px;text-align:center;color:rgba(255,255,255,.68);font-size:13px;line-height:1.6}
-.soda-feed-empty.show{display:block}
-.soda-feed-empty button{margin-top:16px;padding:9px 13px;border:1px solid rgba(255,126,173,.44);background:rgba(255,126,173,.12);color:#ffd8e9;font:700 12px inherit;cursor:pointer}
-@media (max-width:720px){.soda-feed-shell{padding:18px 18px 20px}.soda-feed-track,.soda-feed-cover{width:min(390px,84vw)}.soda-feed-cover{max-height:52vh}.soda-feed-title{font-size:22px}.soda-feed-foot{font-size:9px}}
 .account-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 .account-modal-actions .modal-btn{padding:8px 10px}
 .account-hint{margin-top:10px;font-size:11px;line-height:1.45;color:rgba(255,255,255,.38)}
@@ -1991,8 +1961,13 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   <div class="empty-home-shell">
     <div class="home-hero">
       <div class="home-hero-inner home-construction-inner">
-        <div class="home-title home-construction-title">🚧此处施工，敬请期待🚧</div>
-        <button class="home-chip home-console-chip" type="button" onclick="openHomePlayerConsole()">展开播放器控制台</button>
+        <div class="home-kicker">FOR YOU</div>
+        <div class="home-title home-construction-title">随便听听</div>
+        <div id="home-roam-summary" class="home-sub">从你最近听过的歌、常听歌手和现有推荐里继续往下播放。</div>
+        <div class="home-quick-row">
+          <button id="home-roam-start" class="home-chip home-console-chip" type="button" onclick="startHomeRoam()">开始漫游</button>
+          <button class="home-chip" type="button" onclick="refreshHomeRoam()">换一批</button>
+        </div>
       </div>
     </div>
 
@@ -2009,10 +1984,10 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         <div class="home-card-sub" id="home-daily-sub">登录后同步你的今日歌曲</div>
         <div class="home-card-art" id="home-daily-art"></div>
       </button>
-      <button class="home-card" data-home-tone="playlist" type="button" onclick="playHomeSong(1)">
-        <div class="home-card-label">Song</div>
-        <div class="home-card-title" id="home-private-title">私人电台</div>
-        <div class="home-card-sub" id="home-private-sub">从你的推荐和歌单里开播</div>
+      <button class="home-card" data-home-tone="playlist" type="button" onclick="startHomeRoam()">
+        <div class="home-card-label">Roam</div>
+        <div class="home-card-title" id="home-private-title">随心漫游</div>
+        <div class="home-card-sub" id="home-private-sub">从你的推荐和偏好里连续播放</div>
         <div class="home-card-art" id="home-private-art"></div>
       </button>
       <button class="home-card" data-home-tone="mix" type="button" onclick="playHomeRecent()">
@@ -2051,48 +2026,10 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   <button id="home-btn" class="icon-btn" onclick="goHome()" title="回到 Home" aria-label="回到 Home">
     <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M3 10.8 12 3l9 7.8"/><path d="M5 10v10h14V10"/><path d="M9.5 20v-5h5v5"/></svg>
   </button>
-  <button id="soda-feed-btn" class="icon-btn" onclick="openSodaFeed()" title="刷歌" aria-label="打开刷歌模式">
-    <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M8 4v16"/><path d="M16 4v16"/><path d="m5 8 3-4 3 4"/><path d="m13 16 3 4 3-4"/></svg>
-  </button>
   <button id="user-btn" class="icon-btn logged-out" onclick="onUserBtnClick()" title="登录账号">
     <span class="login-word">登录</span>
   </button>
 </div>
-
-<section id="soda-feed" aria-hidden="true">
-  <div id="soda-feed-art" class="soda-feed-art"></div>
-  <div class="soda-feed-shade"></div>
-  <div class="soda-feed-shell">
-    <header class="soda-feed-head">
-      <div class="soda-feed-label"><i></i><span>刷歌</span></div>
-      <button class="soda-feed-close" type="button" onclick="closeSodaFeed()" aria-label="关闭刷歌">×</button>
-    </header>
-    <main class="soda-feed-stage" id="soda-feed-stage">
-      <article id="soda-feed-track" class="soda-feed-track">
-        <div id="soda-feed-cover" class="soda-feed-cover"></div>
-        <div id="soda-feed-source" class="soda-feed-source"></div>
-        <div id="soda-feed-title" class="soda-feed-title"></div>
-        <div id="soda-feed-artist" class="soda-feed-artist"></div>
-        <div class="soda-feed-actions">
-          <button id="soda-feed-like" class="soda-feed-action" type="button" onclick="toggleSodaFeedLike()" title="喜欢" aria-label="喜欢">
-            <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20.8 4.8a5.5 5.5 0 0 0-7.8 0L12 5.8l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.4 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
-          </button>
-          <button class="soda-feed-action" type="button" onclick="moveSodaFeed(-1)" title="上一首" aria-label="上一首">
-            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="m19 20-8-8 8-8"/><path d="m11 20-8-8 8-8"/></svg>
-          </button>
-          <button id="soda-feed-play" class="soda-feed-action primary" type="button" onclick="toggleSodaFeedPlayback()" title="播放" aria-label="播放">
-            <svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>
-          </button>
-          <button class="soda-feed-action" type="button" onclick="moveSodaFeed(1)" title="下一首" aria-label="下一首">
-            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="m5 4 8 8-8 8"/><path d="m13 4 8 8-8 8"/></svg>
-          </button>
-        </div>
-      </article>
-      <div id="soda-feed-empty" class="soda-feed-empty">登录网易云或 QQ 后即可从现有推荐与播放队列生成刷歌流。<br><button type="button" onclick="openSodaFeedLogin()">登录音乐账号</button></div>
-    </main>
-    <footer id="soda-feed-foot" class="soda-feed-foot"></footer>
-  </div>
-</section>
 
 <button id="fx-fab" title="视觉控制台">
   <svg width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M4 7h8"/><path d="M16 7h4"/><circle cx="14" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></svg>
@@ -2913,6 +2850,7 @@ var homeWeatherLoadTimer = null;
 var homeWeatherLoadPromise = null;
 var weatherRadioStartBusy = false;
 var activeRadioContext = null;
+var homeRoamState = { active: false, loading: false, queries: [], cursor: 0, seen: {}, generation: 0 };
 var listenStatsState = loadListenStatsState();
 var listenSession = null;
 var appPerfMarks = [];
@@ -15755,8 +15693,8 @@ function renderHomeDiscover() {
   if (loggedOutHome) {
     if (dailyTitle) dailyTitle.textContent = '每日推荐';
     if (dailySub) dailySub.textContent = '登录后同步你的今日歌曲';
-    if (privateTitle) privateTitle.textContent = '推荐歌曲';
-    if (privateSub) privateSub.textContent = '登录后同步更多歌曲';
+    if (privateTitle) privateTitle.textContent = '随心漫游';
+    if (privateSub) privateSub.textContent = '从搜索和播放记录里自由接着听';
     if (libTitle) libTitle.textContent = '更多歌曲';
     if (libSub) libSub.textContent = '播放后会继续补全推荐';
     setHomeArt('home-weather-art', '', 280);
@@ -15768,8 +15706,8 @@ function renderHomeDiscover() {
   } else {
     if (dailyTitle) dailyTitle.textContent = daily ? daily.name : '每日推荐';
     if (dailySub) dailySub.textContent = daily ? ((daily.artist || songSourceLabel(daily) || '今日歌曲') + ' · 点击播放今日队列') : '同步你的今日歌曲';
-    if (privateTitle) privateTitle.textContent = cardSongB ? cardSongB.name : '私人雷达';
-    if (privateSub) privateSub.textContent = cardSongB ? (cardSongB.artist || songSourceLabel(cardSongB) || '推荐歌曲') : (homeDiscoverState.songs.length + ' 首 · 根据今日推荐与常听偏好');
+    if (privateTitle) privateTitle.textContent = '随心漫游';
+    if (privateSub) privateSub.textContent = homeRoamState.active ? '正在根据你的播放记录连续补歌' : (homeDiscoverState.songs.length ? '从每日推荐、常听歌手和最近播放里接着听' : '播放几首后会逐步形成你的偏好');
     if (libTitle) libTitle.textContent = cardSongC ? cardSongC.name : (summary.topArtist ? summary.topArtist.name : '更多歌曲');
     if (libSub) libSub.textContent = cardSongC ? (cardSongC.artist || songSourceLabel(cardSongC) || '推荐歌曲') : (summary.topArtist ? ('歌手偏好 · ' + summary.topArtist.plays + ' 次') : '播放几首后生成你的偏好');
     setHomeArt('home-weather-art', (userPlaylists[0] && userPlaylists[0].cover) || (playlistItem && playlistItem.cover) || daily && daily.cover, 280);
@@ -15780,6 +15718,7 @@ function renderHomeDiscover() {
     setHomeArt('home-library-art', cardSongC && cardSongC.cover || summary.topSong && summary.topSong.cover || summary.recent && summary.recent.cover || podcastItem && podcastItem.cover, 280);
   }
   renderHomeTiles();
+  renderHomeRoamSummary();
 }
 async function loadHomeDiscover(force) {
   if (homeDiscoverState.loading) return;
@@ -16171,6 +16110,142 @@ async function waitForHomeDiscoverIdle(timeout) {
     await new Promise(function(resolve){ setTimeout(resolve, 80); });
   }
 }
+function homeRoamSongKey(song) {
+  return queueItemKey(song || {}) || String(song && (song.id || song.mid || song.songmid || song.name) || '');
+}
+function homeRoamQueries() {
+  var queries = [];
+  var summary = homeListenSummary();
+  var current = currentIdx >= 0 && playQueue[currentIdx] || null;
+  [
+    summary.topArtist && summary.topArtist.name,
+    summary.recent && summary.recent.artist,
+    current && current.artist,
+  ].forEach(function(value){
+    String(value || '').split(/[\/&、,，]/).map(function(part){ return part.trim(); }).filter(Boolean).forEach(function(name){
+      if (queries.indexOf(name) < 0) queries.push(name);
+    });
+  });
+  homeDiscoverState.songs.slice(0, 4).forEach(function(song){
+    var name = String(song && song.artist || '').split(/[\/&、,，]/)[0].trim();
+    if (name && queries.indexOf(name) < 0) queries.push(name);
+  });
+  ['华语流行', '轻音乐', 'R&B'].forEach(function(query){ if (queries.indexOf(query) < 0) queries.push(query); });
+  return queries.slice(0, 6);
+}
+function renderHomeRoamSummary() {
+  var summary = document.getElementById('home-roam-summary');
+  var button = document.getElementById('home-roam-start');
+  if (summary) {
+    var listen = homeListenSummary();
+    if (homeRoamState.active) {
+      summary.textContent = '漫游正在使用当前队列，并会在快播完时根据你的播放记录继续补歌。';
+    } else if (listen.topArtist) {
+      summary.textContent = '从 ' + listen.topArtist.name + '、最近播放和现有推荐里，给你接着放。';
+    } else if (homeDiscoverState.songs.length) {
+      summary.textContent = '从你的每日推荐和播放记录里，给你接着放。';
+    } else {
+      summary.textContent = '不需要先建歌单。开始后会根据你实际听过的歌逐步调整。';
+    }
+  }
+  if (button) {
+    button.disabled = homeRoamState.loading;
+    button.textContent = homeRoamState.loading ? '正在整理' : (homeRoamState.active ? '继续漫游' : '开始漫游');
+  }
+}
+function appendHomeRoamSongs(target, songs, context) {
+  var added = 0;
+  (Array.isArray(songs) ? songs : []).forEach(function(song){
+    if (!song || song.type === 'podcast') return;
+    var key = homeRoamSongKey(song);
+    if (!key || homeRoamState.seen[key]) return;
+    homeRoamState.seen[key] = true;
+    var cloned = cloneSong(song);
+    cloned.radioContext = context;
+    target.push(cloned);
+    added += 1;
+  });
+  return added;
+}
+async function loadHomeRoamBatch(minCount) {
+  if (!homeRoamState.active || homeRoamState.loading) return 0;
+  homeRoamState.loading = true;
+  renderHomeRoamSummary();
+  var generation = homeRoamState.generation;
+  var added = 0;
+  try {
+    while (homeRoamState.active && generation === homeRoamState.generation && added < (minCount || 12) && homeRoamState.cursor < homeRoamState.queries.length) {
+      var query = homeRoamState.queries[homeRoamState.cursor++];
+      try {
+        var songs = await fetchMusicSearchResults(query, 'song');
+        added += appendHomeRoamSongs(playQueue, songs, activeRadioContext);
+      } catch (e) {
+        console.warn('[HomeRoam]', query, e);
+      }
+    }
+    if (added) {
+      safeRenderQueuePanel('home-roam-extend');
+      if (emptyHomeActive) renderHomeDiscover();
+    }
+  } finally {
+    if (generation === homeRoamState.generation) {
+      homeRoamState.loading = false;
+      renderHomeRoamSummary();
+    }
+  }
+  return added;
+}
+function maybeExtendHomeRoamQueue() {
+  if (!homeRoamState.active || homeRoamState.loading || !playQueue.length) return;
+  if (currentIdx < playQueue.length - 4) return;
+  loadHomeRoamBatch(12);
+}
+async function startHomeRoam() {
+  if (homeRoamState.loading) return;
+  homeForcedOpen = false;
+  homeSuppressed = false;
+  setHomeControlsLocked(false);
+  if (!homeDiscoverState.loaded && hasAnyPlatformLogin()) {
+    try { await loadHomeDiscover(true); } catch (e) {}
+  }
+  var context = { type: 'home-roam', source: 'home-roam', title: '随心漫游' };
+  homeRoamState.active = true;
+  homeRoamState.loading = false;
+  homeRoamState.queries = homeRoamQueries();
+  homeRoamState.cursor = 0;
+  homeRoamState.seen = {};
+  homeRoamState.generation += 1;
+  activeRadioContext = context;
+  var nextQueue = [];
+  appendHomeRoamSongs(nextQueue, homeDiscoverState.songs, context);
+  appendHomeRoamSongs(nextQueue, listenStatsState.history, context);
+  if (currentIdx >= 0 && playQueue[currentIdx]) appendHomeRoamSongs(nextQueue, [playQueue[currentIdx]], context);
+  playQueue = nextQueue;
+  currentIdx = 0;
+  await loadHomeRoamBatch(18);
+  if (!playQueue.length) {
+    homeRoamState.active = false;
+    renderHomeRoamSummary();
+    showToast('暂时没有可播放的推荐，请先搜索或播放几首歌');
+    return;
+  }
+  safeRenderQueuePanel('home-roam-start');
+  safeShelfRebuild('home-roam-start', true);
+  forcePlaybackControlsInteractive();
+  playQueueAt(0, { context: context }).catch(function(e){ console.warn('[HomeRoamStart]', e); });
+  showToast('已开始随心漫游');
+}
+async function refreshHomeRoam() {
+  if (!homeRoamState.active) {
+    startHomeRoam();
+    return;
+  }
+  try { await loadHomeDiscover(true); } catch (e) {}
+  homeRoamState.queries = homeRoamQueries();
+  homeRoamState.cursor = 0;
+  await loadHomeRoamBatch(12);
+  showToast('已把新推荐加入当前队列');
+}
 async function playHomeDaily() {
   homeForcedOpen = false;
   homeSuppressed = false;
@@ -16195,32 +16270,7 @@ async function playHomeDaily() {
   playQueueAt(0).catch(function(e){ console.warn('[HomeDailyPlay]', e); });
 }
 async function playHomePrivateRadio() {
-  homeForcedOpen = false;
-  homeSuppressed = false;
-  setHomeControlsLocked(false);
-  if (!hasAnyPlatformLogin() && !homeDiscoverState.loggedIn) {
-    showLoginModal({ source: 'home-private' });
-    return;
-  }
-  await waitForHomeDiscoverIdle();
-  if (!homeDiscoverState.loaded || ((!homeDiscoverState.playlists.length && !homeDiscoverState.songs.length) && !homeDiscoverState.loading)) {
-    await loadHomeDiscover(true);
-  }
-  if (homeDiscoverState.songs.length) {
-    playQueue = homeDiscoverState.songs.map(cloneSong);
-    currentIdx = 0;
-    safeRenderQueuePanel('home-private-radio');
-    safeShelfRebuild('home-private-radio', true);
-    forcePlaybackControlsInteractive();
-    playQueueAt(0).catch(function(e){ console.warn('[HomePrivatePlay]', e); });
-    return;
-  }
-  var item = homeDiscoverState.playlists[0];
-  if (item && item.id) {
-    await loadPlaylistIntoQueueById(item.id, true, item.name || '私人雷达');
-    return;
-  }
-  openHomeLibrary();
+  startHomeRoam();
 }
 function playHomeSong(index) {
   homeForcedOpen = false;
@@ -18892,7 +18942,6 @@ async function playQueueAt(idx, opts) {
   homeForcedOpen = false;
   if (!opts.preserveHomeState) homeSuppressed = false;
   currentIdx = idx;
-  syncSodaFeedPlayback(playQueue[idx]);
   trackSwitchToken++;
   markPlayPhase('cancel-previous-track');
   cancelBeatAnalysisTimer();
@@ -18907,6 +18956,12 @@ async function playQueueAt(idx, opts) {
   playQueue[idx] = song;
   var playbackContext = opts.context || (song && song.radioContext) || null;
   activeRadioContext = playbackContext || null;
+  if (homeRoamState.active && (!playbackContext || playbackContext.source !== 'home-roam')) {
+    homeRoamState.active = false;
+    homeRoamState.generation += 1;
+    renderHomeRoamSummary();
+  }
+  if (playbackContext && playbackContext.source === 'home-roam') maybeExtendHomeRoamQueue();
   safeRenderQueuePanel('play-queue-at-switch', { scrollCurrent: miniQueueOpen });
   safePlaybackStep('shelf-preview-suppress', suppressShelfPreviewForPlaybackSwitch);
   pauseCurrentAudioForTrackSwitch();
