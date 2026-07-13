@@ -55,6 +55,7 @@ const zlib = require('zlib');
 const { once } = require('events');
 const { fileURLToPath } = require('url');
 const { analyzePodcastDjStream, analyzePodcastDjIntro } = require('./dj-analyzer');
+const { LibraryStore } = require('./desktop/library-store');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -66,6 +67,7 @@ const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.jo
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
 const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\MineradioCache\\beatmaps';
 const USER_DATA_DIR = process.env.MINERADIO_USER_DATA_DIR || path.dirname(COOKIE_FILE || path.join(__dirname, '.cookie'));
+const LOCAL_LIBRARY_FILE = process.env.MINERADIO_LIBRARY_FILE || path.join(USER_DATA_DIR, 'mineradio-library.json');
 // Official Douyin OAuth is optional. Keep credentials outside the repository.
 const DOUYIN_OAUTH_CLIENT_KEY = String(process.env.MINERADIO_DOUYIN_CLIENT_KEY || '').trim();
 const DOUYIN_OAUTH_CLIENT_SECRET = String(process.env.MINERADIO_DOUYIN_CLIENT_SECRET || '').trim();
@@ -101,6 +103,7 @@ const WEATHER_DEFAULT_LOCATION = {
 };
 
 const updateDownloadJobs = new Map();
+const localLibrary = new LibraryStore(LOCAL_LIBRARY_FILE);
 
 function applySystemCertificateAuthorities() {
   try {
@@ -4743,6 +4746,87 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---------- 登录态查询 ----------
+  // ---------- Mineradio local library ----------
+  // The library is independent from provider login and never writes back to QQ/NetEase.
+  if (pn === '/api/library/state') {
+    sendJSON(res, { ok: true, ...localLibrary.summary() });
+    return;
+  }
+  if (pn === '/api/library/playlist/tracks') {
+    const data = localLibrary.getPlaylist(url.searchParams.get('id'));
+    if (!data) { sendJSON(res, { error: 'Playlist not found' }, 404); return; }
+    sendJSON(res, { ok: true, ...data });
+    return;
+  }
+  if (pn === '/api/library/profile') {
+    try {
+      const body = req.method === 'POST' ? await readRequestBody(req) : {};
+      const state = localLibrary.state;
+      const name = String(body.name || '').trim().slice(0, 40);
+      const avatar = String(body.avatar || '').trim().slice(0, 2048);
+      if (name) state.profile.name = name;
+      if (Object.prototype.hasOwnProperty.call(body, 'avatar')) state.profile.avatar = avatar;
+      state.profile.updatedAt = Date.now();
+      localLibrary.save();
+      sendJSON(res, { ok: true, profile: state.profile });
+    } catch (err) { sendJSON(res, { error: err.message }, 400); }
+    return;
+  }
+  if (pn === '/api/library/playlist/create') {
+    try {
+      const body = req.method === 'POST' ? await readRequestBody(req) : {};
+      sendJSON(res, { ok: true, playlist: localLibrary.createPlaylist(body.name, body.description) });
+    } catch (err) { sendJSON(res, { error: err.message }, 400); }
+    return;
+  }
+  if (pn === '/api/library/playlist/add-song') {
+    try {
+      const body = req.method === 'POST' ? await readRequestBody(req) : {};
+      sendJSON(res, { ok: true, ...localLibrary.addTrack(body.playlistId || body.pid, body.song || body) });
+    } catch (err) { sendJSON(res, { error: err.message }, 400); }
+    return;
+  }
+  if (pn === '/api/library/favorite') {
+    try {
+      const body = req.method === 'POST' ? await readRequestBody(req) : {};
+      const liked = typeof body.liked === 'boolean' ? body.liked : (body.like == null ? null : String(body.like) !== 'false');
+      sendJSON(res, { ok: true, ...localLibrary.toggleFavorite(body.song || body, liked) });
+    } catch (err) { sendJSON(res, { error: err.message }, 400); }
+    return;
+  }
+  if (pn === '/api/library/history') {
+    try {
+      const body = req.method === 'POST' ? await readRequestBody(req) : {};
+      localLibrary.recordHistory(body.song || body);
+      sendJSON(res, { ok: true });
+    } catch (err) { sendJSON(res, { error: err.message }, 400); }
+    return;
+  }
+  if (pn === '/api/library/import/playlist') {
+    try {
+      const body = req.method === 'POST' ? await readRequestBody(req) : {};
+      const provider = String(body.provider || '').toLowerCase();
+      const playlistId = String(body.playlistId || body.id || '');
+      if (!playlistId || !['netease', 'qq'].includes(provider)) throw new Error('Invalid import request');
+      let remote;
+      let tracks;
+      if (provider === 'qq') {
+        const result = await handleQQPlaylistTracks(playlistId);
+        if (!result.loggedIn) throw new Error('QQ_LOGIN_REQUIRED');
+        remote = result.playlist || { id: playlistId, name: body.name || 'QQ 音乐歌单', cover: body.cover || '' };
+        tracks = result.tracks || [];
+      } else {
+        const info = await getLoginInfo();
+        if (!info.loggedIn) throw new Error('NETEASE_LOGIN_REQUIRED');
+        const result = await handleNeteasePlaylistTracks(playlistId);
+        remote = result.playlist || { id: playlistId, name: body.name || '网易云歌单', cover: body.cover || '' };
+        tracks = result.tracks || [];
+      }
+      sendJSON(res, { ok: true, playlist: localLibrary.importPlaylist(remote, tracks, provider), importedCount: tracks.length });
+    } catch (err) { sendJSON(res, { error: err.message }, 400); }
+    return;
+  }
+
   if (pn === '/api/login/status') {
     const info = await getLoginInfo();
     sendJSON(res, info);

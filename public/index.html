@@ -2321,8 +2321,8 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   </div>
   <div id="pl-pane" style="display:none">
     <div class="queue-toolbar">
-      <div class="queue-chip">登录后显示网易云 / QQ 歌单</div>
-      <button class="fx-mini-btn ghost" onclick="refreshUserPlaylists(true)" style="height:26px;padding:0 10px;font-size:11px">刷新</button>
+      <div class="queue-chip">Mineradio 本地歌单 · QQ / 网易云</div>
+      <div style="display:flex;gap:6px"><button class="fx-mini-btn ghost" onclick="createLocalPlaylist()" title="新建 Mineradio 歌单" style="height:26px;padding:0 9px;font-size:14px">+</button><button class="fx-mini-btn ghost" onclick="refreshUserPlaylists(true)" style="height:26px;padding:0 10px;font-size:11px">刷新</button></div>
     </div>
     <div id="pl-list" style="margin-top:6px"></div>
   </div>
@@ -2787,6 +2787,7 @@ var AUDIO_FADE_IN_MS = 460;
 var AUDIO_FADE_OUT_MS = 420;
 var AUDIO_SILENCE_GAIN = 0.0001;
 var userPlaylists = [], qqPlaylists = [], myPodcastCollections = [], myPodcastItems = {}, playlistCoverCache = {};
+var localLibraryState = { profile: null, playlists: [], favoriteIds: [] }, localLikedSongMap = {};
 var CUSTOM_COVER_STORE_KEY = 'mineradio-custom-covers';
 var CUSTOM_LYRIC_STORE_KEY = 'mineradio-custom-lyrics-v1';
 var CUSTOM_LYRIC_PREF_STORE_KEY = 'mineradio-custom-lyric-prefs-v1';
@@ -17126,8 +17127,16 @@ function isCloudSong(song) {
   if (song.type === 'local' || song.type === 'podcast' || song.source === 'podcast') return false;
   return !song.provider || song.provider === 'netease' || song.source === 'netease' || song.type === 'song';
 }
+function localLibrarySongKey(song) {
+  if (!song) return '';
+  var provider = String(song.provider || song.source || song.type || 'unknown').toLowerCase();
+  var sourceId = String(song.id || song.songmid || song.mid || song.mediaMid || song.url || '').trim();
+  return sourceId ? (provider + ':' + sourceId) : '';
+}
 function isSongLiked(song) {
-  return !!(song && song.id && likedSongMap[String(song.id)]);
+  if (loginStatus.loggedIn && isCloudSong(song)) return !!(song && song.id && likedSongMap[String(song.id)]);
+  var key = localLibrarySongKey(song);
+  return !!(key && localLikedSongMap[key]);
 }
 function ensureLoggedInForAction() {
   if (loginStatus.loggedIn) return true;
@@ -17210,11 +17219,33 @@ function refreshSearchResultActionStates() {
   });
 }
 async function toggleLikeSong(song) {
-  if (!isCloudSong(song)) {
-    showToast(songProviderKey(song) === 'qq' ? 'QQ 音乐红心同步待登录接口接入' : '本地文件暂不支持红心同步');
+  if (!song) return;
+  if (!loginStatus.loggedIn || !isCloudSong(song)) {
+    var localKey = localLibrarySongKey(song);
+    if (!localKey || likeBusyMap[localKey]) return;
+    var localNext = !localLikedSongMap[localKey];
+    likeBusyMap[localKey] = true;
+    localLikedSongMap[localKey] = localNext;
+    updateLikeButtons(song);
+    safeRenderQueuePanel('local-like-optimistic', { scrollCurrent: miniQueueOpen });
+    refreshSearchResultActionStates();
+    try {
+      var localResult = await apiJson('/api/library/favorite', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ song: song, liked: localNext }) });
+      if (localResult && localResult.error) throw new Error(localResult.error);
+      localLikedSongMap[localKey] = !!localResult.liked;
+      showToast(localNext ? '已加入 Mineradio 我喜欢' : '已移出 Mineradio 我喜欢');
+      refreshUserPlaylists(true);
+    } catch (err) {
+      localLikedSongMap[localKey] = !localNext;
+      showToast('本地收藏保存失败');
+    } finally {
+      delete likeBusyMap[localKey];
+      updateLikeButtons(song);
+      safeRenderQueuePanel('local-like-final', { scrollCurrent: miniQueueOpen });
+      refreshSearchResultActionStates();
+    }
     return;
   }
-  if (!ensureLoggedInForAction()) return;
   var id = String(song.id);
   if (likeBusyMap[id]) return;
   var next = !likedSongMap[id];
@@ -17243,11 +17274,7 @@ function toggleLikeSearchResult(i) { if (playlist[i]) toggleLikeSong(playlist[i]
 function toggleLikeQueueIndex(i) { if (playQueue[i]) toggleLikeSong(playQueue[i]); }
 function toggleLikeDetailSong(song) { toggleLikeSong(song); }
 function openCollectModal(song) {
-  if (!isCloudSong(song)) {
-    showToast(songProviderKey(song) === 'qq' ? 'QQ 音乐收藏到歌单待登录接口接入' : '本地文件暂不支持收藏到网易云歌单');
-    return;
-  }
-  if (!ensureLoggedInForAction()) return;
+  if (!song) return;
   collectTargetSong = song;
   renderCollectModal();
   openGsapModal(document.getElementById('collect-modal'));
@@ -17272,22 +17299,18 @@ function renderCollectModal() {
   var cover = songCoverSrc(song, 80);
   current.innerHTML = (cover ? '<img src="' + cover + '" alt="">' : '<div class="cover-placeholder"></div>') +
     '<div style="min-width:0"><div class="collect-title">' + escHtml(song.name || '当前歌曲') + '</div><div class="collect-sub">' + escHtml(song.artist || '') + '</div></div>';
-  if (!loginStatus.loggedIn) {
-    list.innerHTML = '<div class="collect-empty">登录后显示你的歌单</div>';
-    return;
-  }
-  if (!userPlaylists.length) {
+  var useProviderPlaylist = loginStatus.loggedIn && isCloudSong(song);
+  var availablePlaylists = useProviderPlaylist
+    ? userPlaylists.filter(function(pl){ return pl.provider !== 'local' && !pl.subscribed; })
+    : (localLibraryState.playlists || []);
+  if (!availablePlaylists.length) {
     list.innerHTML = miniQueueSkeleton();
     return;
   }
-  var mine = userPlaylists.filter(function(pl){ return !pl.subscribed; });
-  if (!mine.length) {
-    list.innerHTML = '<div class="collect-empty">还没有可写入的歌单，可以先新建一个</div>';
-    return;
-  }
-  list.innerHTML = mine.map(function(pl){
+  list.innerHTML = availablePlaylists.map(function(pl){
     var thumb = pl.cover ? coverUrlWithSize(pl.cover, 80) : '';
-    return '<div class="collect-item" data-collect-pid="' + escHtml(String(pl.id || '')) + '" onclick="addCollectTargetToPlaylist(this.getAttribute(\'data-collect-pid\'))">' +
+    var local = pl.provider === 'local';
+    return '<div class="collect-item" data-collect-pid="' + escHtml(String(pl.id || '')) + '" data-collect-local="' + (local ? '1' : '0') + '" onclick="addCollectTargetToPlaylist(this.getAttribute(\'data-collect-pid\'), this.getAttribute(\'data-collect-local\') === \'1\')">' +
       (thumb ? '<img src="' + thumb + '" alt="">' : '<div class="cover-placeholder"></div>') +
       '<div style="min-width:0"><div class="collect-title">' + escHtml(pl.name || '') + '</div><div class="collect-sub">' + (pl.trackCount || 0) + ' 首</div></div>' +
     '</div>';
@@ -17302,12 +17325,14 @@ function setCollectBusyPid(pid, busy) {
   });
 }
 async function createPlaylistFromCollect() {
-  if (!ensureLoggedInForAction()) return;
   var input = document.getElementById('collect-new-name');
   var name = input ? input.value.trim() : '';
   if (!name) { showToast('先输入歌单名称'); return; }
   try {
-    var r = await apiJson('/api/playlist/create?name=' + encodeURIComponent(name));
+    var useProviderPlaylist = loginStatus.loggedIn && isCloudSong(collectTargetSong);
+    var r = useProviderPlaylist
+      ? await apiJson('/api/playlist/create?name=' + encodeURIComponent(name))
+      : await apiJson('/api/library/playlist/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name }) });
     if (r && r.error) throw new Error(r.error);
     if (input) input.value = '';
     showToast('歌单已创建');
@@ -17315,7 +17340,7 @@ async function createPlaylistFromCollect() {
     renderCollectModal();
     var created = r && r.playlist;
     var pid = created && created.id;
-    if (pid && collectTargetSong) addCollectTargetToPlaylist(pid);
+    if (pid && collectTargetSong) addCollectTargetToPlaylist(pid, !useProviderPlaylist);
   } catch (err) {
     showToast('创建歌单失败');
   }
@@ -17346,7 +17371,7 @@ async function verifySongInPlaylist(pid, songId) {
   }
   return false;
 }
-async function addCollectTargetToPlaylist(pid) {
+async function addCollectTargetToPlaylist(pid, localOnly) {
   if (collectBusy || !collectTargetSong || !pid) return;
   collectBusy = true;
   setCollectBusyPid(pid, true);
@@ -17354,16 +17379,14 @@ async function addCollectTargetToPlaylist(pid) {
   showToast('正在收藏到歌单...');
   try {
     var songId = String(collectTargetSong.id || '');
-    var r = await apiJson('/api/playlist/add-song', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pid: pid, id: songId })
-    });
-    if (!(r && r.success)) throw new Error(collectResultMessage(r));
-    showToast('已收藏到歌单');
+    var r = localOnly
+      ? await apiJson('/api/library/playlist/add-song', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlistId: pid, song: collectTargetSong }) })
+      : await apiJson('/api/playlist/add-song', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid: pid, id: songId }) });
+    if (localOnly ? !(r && r.ok) : !(r && r.success)) throw new Error(collectResultMessage(r));
+    showToast(localOnly ? '已保存到 Mineradio 歌单' : '已收藏到歌单');
     closeCollectModal();
     refreshUserPlaylists(true);
-    setTimeout(function(){
+    if (!localOnly) setTimeout(function(){
       verifySongInPlaylist(pid, songId).then(function(ok){
         if (!ok) console.warn('collect submitted but verify did not find song yet:', pid, songId);
       });
@@ -18770,6 +18793,7 @@ async function playQueueAt(idx, opts) {
   markPlayPhase('track-setup');
   var song = safePlaybackStep('hydrate-song', function(){ return hydrateCustomCover(playQueue[idx]); }) || playQueue[idx];
   playQueue[idx] = song;
+  apiJson('/api/library/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ song: song }) }).catch(function(){});
   var playbackContext = opts.context || (song && song.radioContext) || null;
   activeRadioContext = playbackContext || null;
   if (homeRoamState.active && (!playbackContext || playbackContext.source !== 'home-roam')) {
@@ -19914,13 +19938,6 @@ function renderQueuePanel(opts) {
   renderMiniQueuePanel({ scrollCurrent: miniQueueOpen });
 }
 async function refreshUserPlaylists(force) {
-  if (!loginStatus.loggedIn && !qqLoginStatus.loggedIn) {
-    resetPlaylistPanelRenderLimit();
-    document.getElementById('pl-list').innerHTML = '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">登录后显示个人歌单</div>';
-    var podcastListLoggedOut = document.getElementById('podcast-list');
-    if (podcastListLoggedOut) podcastListLoggedOut.innerHTML = '<div style="text-align:center;padding:14px 0;color:rgba(255,255,255,.28);font-size:11.5px">登录后显示我的播客</div>';
-    return;
-  }
   if (force) resetPlaylistPanelRenderLimit();
   var hasCachedQQPlaylists = userPlaylists.some(function(pl){ return pl && pl.provider === 'qq'; });
   var needsQQRefresh = qqLoginStatus.loggedIn && !hasCachedQQPlaylists;
@@ -19939,14 +19956,19 @@ async function refreshUserPlaylists(force) {
   if ($pod) $pod.innerHTML = miniQueueSkeleton();
   try {
     var result = await Promise.all([
+      apiJson('/api/library/state'),
       loginStatus.loggedIn ? apiJson('/api/user/playlists') : Promise.resolve({ playlists: [] }),
       loginStatus.loggedIn ? apiJson('/api/podcast/my') : Promise.resolve({ collections: [], loggedIn: false }),
       qqLoginStatus.loggedIn ? apiJson('/api/qq/user/playlists') : Promise.resolve({ playlists: [] })
     ]);
-    var neteaseLists = (result[0].playlists || []).map(function(pl){ pl.provider = 'netease'; pl.source = 'netease'; return pl; });
-    qqPlaylists = (result[2].playlists || []).map(function(pl){ pl.provider = 'qq'; pl.source = 'qq'; return pl; });
-    userPlaylists = neteaseLists.concat(qqPlaylists);
-    myPodcastCollections = result[1].collections || [];
+    localLibraryState = result[0] || { profile: null, playlists: [], favoriteIds: [] };
+    localLikedSongMap = {};
+    (localLibraryState.favoriteIds || []).forEach(function(id){ localLikedSongMap[String(id)] = true; });
+    var localLists = (localLibraryState.playlists || []).map(function(pl){ pl.provider = 'local'; pl.source = 'local'; return pl; });
+    var neteaseLists = (result[1].playlists || []).map(function(pl){ pl.provider = 'netease'; pl.source = 'netease'; return pl; });
+    qqPlaylists = (result[3].playlists || []).map(function(pl){ pl.provider = 'qq'; pl.source = 'qq'; return pl; });
+    userPlaylists = localLists.concat(neteaseLists, qqPlaylists);
+    myPodcastCollections = result[2].collections || [];
     var animatePanel = isPlaylistPanelVisibleForRender();
     renderUserPlaylistsList({ animate: animatePanel, reset: true });
     renderMyPodcastCollections({ animate: animatePanel });
@@ -19956,10 +19978,10 @@ async function refreshUserPlaylists(force) {
 }
 var playlistPanelDetailState = { key: '', loading: false, playlist: null, tracks: [], token: 0, renderLimit: PLAYLIST_DETAIL_INITIAL_RENDER };
 function playlistPanelKey(provider, id) {
-  return (provider === 'qq' ? 'qq' : 'netease') + ':' + String(id || '');
+  return (provider === 'qq' ? 'qq' : (provider === 'local' ? 'local' : 'netease')) + ':' + String(id || '');
 }
 function playlistPanelProviderId(provider, id) {
-  return provider === 'qq' ? ('qq:' + id) : id;
+  return provider === 'qq' ? ('qq:' + id) : (provider === 'local' ? ('local:' + id) : id);
 }
 function playlistPanelDetailHtml(pl, provider) {
   var key = playlistPanelKey(provider, pl && pl.id);
@@ -20026,9 +20048,9 @@ function scrollPlaylistPanelDetailIntoView(key) {
 }
 async function openPlaylistPanelDetail(provider, pid, title) {
   if (!pid) return;
-  provider = provider === 'qq' ? 'qq' : 'netease';
+  provider = provider === 'qq' ? 'qq' : (provider === 'local' ? 'local' : 'netease');
   var key = playlistPanelKey(provider, pid);
-  var pl = userPlaylists.find(function(item){ return playlistPanelKey(item.provider === 'qq' ? 'qq' : 'netease', item.id) === key; }) || { id: pid, provider: provider, name: title || '歌单详情' };
+  var pl = userPlaylists.find(function(item){ return playlistPanelKey(item.provider === 'qq' ? 'qq' : (item.provider === 'local' ? 'local' : 'netease'), item.id) === key; }) || { id: pid, provider: provider, name: title || '歌单详情' };
   if (playlistPanelDetailState.key === key && !playlistPanelDetailState.loading && playlistPanelDetailState.tracks.length) {
     playlistPanelDetailState.key = '';
     playlistPanelDetailState.tracks = [];
@@ -20044,7 +20066,9 @@ async function openPlaylistPanelDetail(provider, pid, title) {
   try {
     var r = provider === 'qq'
       ? await apiJson('/api/qq/playlist/tracks?id=' + encodeURIComponent(pid))
-      : await apiJson('/api/playlist/tracks?id=' + encodeURIComponent(pid));
+      : (provider === 'local'
+        ? await apiJson('/api/library/playlist/tracks?id=' + encodeURIComponent(pid))
+        : await apiJson('/api/playlist/tracks?id=' + encodeURIComponent(pid)));
     if (playlistPanelDetailState.token !== token) return;
     playlistPanelDetailState.loading = false;
     playlistPanelDetailState.tracks = (r && r.tracks || []).map(cloneSong);
@@ -20064,7 +20088,7 @@ function playPlaylistPanelDetail() {
   var st = playlistPanelDetailState;
   if (!st || !st.key) return;
   var parts = st.key.split(':');
-  var provider = parts[0] === 'qq' ? 'qq' : 'netease';
+  var provider = parts[0] === 'qq' ? 'qq' : (parts[0] === 'local' ? 'local' : 'netease');
   var pid = parts.slice(1).join(':');
   loadPlaylistIntoQueueById(playlistPanelProviderId(provider, pid), true, st.playlist && st.playlist.name || '');
 }
@@ -20134,19 +20158,21 @@ function renderUserPlaylistsList(opts) {
     return;
   }
   function playlistCardHtml(pl) {
-    var provider = pl.provider === 'qq' ? 'qq' : 'netease';
-    var providerLabel = provider === 'qq' ? 'QQ' : 'NE';
-    var thumb = pl.cover ? (provider === 'qq' ? pl.cover : (pl.cover + '?param=88y88')) : '';
+    var provider = pl.provider === 'qq' ? 'qq' : (pl.provider === 'local' ? 'local' : 'netease');
+    var providerLabel = provider === 'qq' ? 'QQ' : (provider === 'local' ? 'MR' : 'NE');
+    var thumb = pl.cover ? (provider === 'netease' ? (pl.cover + '?param=88y88') : pl.cover) : '';
     var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0"></div>';
     var key = playlistPanelKey(provider, pl.id);
     var expanded = playlistPanelDetailState.key === key ? ' expanded' : '';
+    var importButton = provider === 'local' ? '' : '<button type="button" class="fx-mini-btn ghost" data-playlist-import="1" title="导入到 Mineradio" style="height:24px;padding:0 7px;font-size:10px">导入</button>';
     return '<div class="pl-card' + expanded + '" data-playlist-provider="' + provider + '" data-playlist-id="' + escHtml(String(pl.id || '')) + '" data-playlist-title="' + escHtml(pl.name || '') + '">' +
       imgTag +
-      '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(pl.name) + '<span class="tag-source ' + provider + '" style="margin-left:6px;vertical-align:1px">' + providerLabel + '</span></div><div class="pl-sub">' + pl.trackCount + ' 首 · ' + escHtml(pl.creator || '') + '</div></div>' +
+      '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(pl.name) + '<span class="tag-source ' + provider + '" style="margin-left:6px;vertical-align:1px">' + providerLabel + '</span></div><div class="pl-sub">' + pl.trackCount + ' 首 · ' + escHtml(pl.creator || '') + '</div></div>' + importButton +
     '</div>' + playlistPanelDetailHtml(pl, provider);
   }
   var groups = [
-    { key:'netease', label:'网易云歌单', items:userPlaylists.filter(function(pl){ return pl.provider !== 'qq'; }) },
+    { key:'local', label:'Mineradio 本地音乐', items:userPlaylists.filter(function(pl){ return pl.provider === 'local'; }) },
+    { key:'netease', label:'网易云歌单', items:userPlaylists.filter(function(pl){ return pl.provider !== 'qq' && pl.provider !== 'local'; }) },
     { key:'qq', label:'QQ 音乐歌单', items:userPlaylists.filter(function(pl){ return pl.provider === 'qq'; }) }
   ];
   if (opts.reset) resetPlaylistPanelRenderLimit();
@@ -20193,6 +20219,14 @@ function renderMyPodcastCollections(opts) {
   if (opts.animate) animateVisiblePanelList($pod, '.pl-card', document.getElementById('playlist-panel'));
 }
 document.getElementById('pl-list').addEventListener('click', function(e){
+  var importButton = e.target && e.target.closest ? e.target.closest('[data-playlist-import]') : null;
+  if (importButton) {
+    e.preventDefault();
+    e.stopPropagation();
+    var importCard = importButton.closest('.pl-card');
+    if (importCard) importProviderPlaylist(importCard);
+    return;
+  }
   var loadMore = e.target && e.target.closest ? e.target.closest('[data-pl-load-more]') : null;
   if (loadMore) {
     e.preventDefault();
@@ -20241,6 +20275,39 @@ document.getElementById('pl-list').addEventListener('click', function(e){
   var pid = card.getAttribute('data-playlist-id') || '';
   openPlaylistPanelDetail(provider, pid, card.getAttribute('data-playlist-title') || '');
 });
+async function importProviderPlaylist(card) {
+  var provider = card.getAttribute('data-playlist-provider');
+  var playlistId = card.getAttribute('data-playlist-id');
+  if (!playlistId || (provider !== 'qq' && provider !== 'netease')) return;
+  showToast('正在导入到 Mineradio...');
+  try {
+    var result = await apiJson('/api/library/import/playlist', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: provider, playlistId: playlistId, name: card.getAttribute('data-playlist-title') || '' })
+    });
+    if (!result || result.error) throw new Error(result && result.error || '导入失败');
+    showToast('已导入 ' + (result.importedCount || 0) + ' 首到 Mineradio');
+    refreshUserPlaylists(true);
+  } catch (err) {
+    showToast('导入失败: ' + (err && err.message || '请检查登录状态'));
+  }
+}
+async function createLocalPlaylist() {
+  var name = window.prompt('歌单名称');
+  if (name == null) return;
+  name = String(name).trim();
+  if (!name) { showToast('请输入歌单名称'); return; }
+  try {
+    var result = await apiJson('/api/library/playlist/create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name })
+    });
+    if (!result || result.error) throw new Error(result && result.error || '创建失败');
+    showToast('已创建 Mineradio 歌单');
+    refreshUserPlaylists(true);
+  } catch (err) {
+    showToast('创建本地歌单失败');
+  }
+}
 var podcastListEl = document.getElementById('podcast-list');
 if (podcastListEl) {
   podcastListEl.addEventListener('click', function(e){
@@ -20338,11 +20405,14 @@ async function loadPlaylistIntoQueueById(id, autoplay, title) {
   updateEmptyHomeVisibility();
   showLoading();
   var qqPlaylistId = String(id || '').indexOf('qq:') === 0 ? String(id).slice(3) : '';
+  var localPlaylistId = String(id || '').indexOf('local:') === 0 ? String(id).slice(6) : '';
   var r = null;
   try {
     r = qqPlaylistId
       ? await apiJson('/api/qq/playlist/tracks?id=' + encodeURIComponent(qqPlaylistId))
-      : await apiJson('/api/playlist/tracks?id=' + encodeURIComponent(id));
+      : (localPlaylistId
+        ? await apiJson('/api/library/playlist/tracks?id=' + encodeURIComponent(localPlaylistId))
+        : await apiJson('/api/playlist/tracks?id=' + encodeURIComponent(id)));
   } catch (e) {
     console.warn('[PlaylistLoadApi]', id, e);
     showToast('歌单加载失败');
@@ -20353,8 +20423,8 @@ async function loadPlaylistIntoQueueById(id, autoplay, title) {
     if (r.error) { showToast('歌单加载失败: ' + r.error); return; }
     if (!r.tracks || !r.tracks.length) { showToast('歌单为空'); return; }
     playQueue = r.tracks.map(cloneSong);
-    if (!qqPlaylistId && isLikedPlaylistContext(id, title, r.playlist)) markSongsLiked(playQueue, true);
-    if (!qqPlaylistId) syncLikeStatusForSongs(playQueue);
+    if (!qqPlaylistId && !localPlaylistId && isLikedPlaylistContext(id, title, r.playlist)) markSongsLiked(playQueue, true);
+    if (!qqPlaylistId && !localPlaylistId) syncLikeStatusForSongs(playQueue);
     currentIdx = 0;
     safeRenderQueuePanel('playlist-load');
     safeSwitchPlaylistTab('queue', 'playlist-load');
